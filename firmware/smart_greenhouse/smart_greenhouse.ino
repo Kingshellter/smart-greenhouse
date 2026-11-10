@@ -175,6 +175,27 @@ int clampLid(int deg) {
   return constrain(deg, S.lidClosedDeg - LID_MAX_SWING, S.lidClosedDeg + LID_MAX_SWING);
 }
 
+// Posisi tutup terakhir disimpan di NVS (hanya saat servo sampai, bukan tiap derajat → aman untuk flash).
+// Saat boot/restart (mis. brownout) servo ditahan di posisi itu, BUKAN langsung lompat ke 90°.
+void saveLidState() {
+  int32_t st[2] = { (int32_t)lidPos, (int32_t)servoPos };
+  int32_t old[2] = { -1, -1 };
+  prefs.getBytes("lid", old, sizeof(old));
+  if (memcmp(st, old, sizeof(st)) != 0) prefs.putBytes("lid", st, sizeof(st));
+}
+
+bool restoreLidState() {
+  int32_t st[2];
+  if (prefs.getBytesLength("lid") != sizeof(st)) return false;
+  prefs.getBytes("lid", st, sizeof(st));
+  if (st[0] < LID_CLOSED || st[0] > LID_MAINT || st[1] < 0 || st[1] > 180) return false;
+  lidPos = (LidPos)st[0];
+  servoPos = st[1];
+  servoGoTo(st[1]);                     // attach + tulis posisi yang sama → servo tidak bergerak
+  logEvent("lid", lidPos == LID_OPEN ? "open" : lidPos == LID_MAINT ? "maintenance" : "close", st[1], "boot", "restore");
+  return true;
+}
+
 void servoGoTo(int deg) {
   servoTarget = clampLid(deg);
   if (!servoAttached) {
@@ -205,7 +226,7 @@ void updateServo() {
     }
     return;
   }
-  if (servoArrivedMs == 0) servoArrivedMs = now;
+  if (servoArrivedMs == 0) { servoArrivedMs = now; saveLidState(); }
   // Servo sengaja TIDAK di-detach: sebagian MG996R meluncur sendiri ke ujung saat sinyal PWM dilepas.
   // Sinyal tetap aktif menahan posisi (juga mencegah tutup melorot karena beratnya sendiri).
 }
@@ -479,7 +500,7 @@ void setup() {
   dht.begin();
 
   ESP32PWM::allocateTimer(0);
-  setLid(LID_CLOSED, "boot");            // posisi awal: tertutup
+  if (!restoreLidState()) setLid(LID_CLOSED, "boot");   // pertama kali: tertutup
   logEvent("system", "boot", (float)rr, "boot", rr == ESP_RST_BROWNOUT ? "brownout" : nullptr);
 
   if (netEnabled) {
