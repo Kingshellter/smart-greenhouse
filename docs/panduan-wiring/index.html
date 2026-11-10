@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panduan Wiring Smart Mini-Greenhouse</title>
+<style>
+:root{
+  --bg:#f5f6f2; --card:#ffffff; --ink:#1b211a; --muted:#666d62; --line:#e1e4dc; --soft:#f0f2ec;
+  --accent:#2f7d4f; --accent-soft:#e3f1e8;
+  --sig:#2563eb; --v5:#dc2626; --v33:#e08a0b; --gnd:#1f2937; --none:#9ca3af; --usb:#6b7280;
+  --warn-bg:#fdf3dc; --warn-ink:#6b4a10; --warn-line:#f0d99a;
+  --danger-bg:#fdecea; --danger-ink:#7f1d1d; --danger-line:#f6c1bb;
+  --board:#1f2937; --board-ink:#e5e7eb; --board-dim:#7b8494;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#141714; --card:#1c201c; --ink:#e8ebe5; --muted:#a1a89c; --line:#2f352e; --soft:#232823;
+    --accent:#5cbf84; --accent-soft:#1f3326;
+    --sig:#60a5fa; --v5:#f87171; --v33:#fbbf24; --gnd:#d1d5db; --none:#6b7280; --usb:#9ca3af;
+    --warn-bg:#3a2f14; --warn-ink:#f5dfa8; --warn-line:#5b4818;
+    --danger-bg:#3b1a17; --danger-ink:#fecaca; --danger-line:#6b2a24;
+    --board:#0b0f14; --board-ink:#e5e7eb; --board-dim:#6b7280;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 18px 64px}
+header h1{font-size:1.6rem;margin:0 0 4px;letter-spacing:-.01em}
+header p{margin:0;color:var(--muted)}
+.eyebrow{color:var(--accent);font-weight:650;font-size:.78rem;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+.modes{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 6px}
+.mode{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:10px 14px;text-align:left;cursor:pointer;min-width:200px;flex:1}
+.mode b{display:block;font-size:.95rem}
+.mode span{display:block;color:var(--muted);font-size:.8rem;line-height:1.35;margin-top:2px}
+.mode.on{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.layout{display:grid;grid-template-columns:230px 1fr;gap:18px;margin-top:16px}
+@media (max-width:860px){.layout{grid-template-columns:1fr}}
+nav{position:sticky;top:12px;align-self:start;display:flex;flex-direction:column;gap:4px}
+@media (max-width:860px){nav{position:static;flex-direction:row;overflow-x:auto;padding-bottom:4px}}
+.navbtn{display:flex;align-items:center;gap:10px;border:0;background:transparent;border-radius:10px;padding:8px 10px;cursor:pointer;text-align:left;white-space:nowrap}
+.navbtn:hover{background:var(--soft)}
+.navbtn.on{background:var(--card);box-shadow:0 0 0 1px var(--line)}
+.navbtn .num{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:.78rem;font-weight:700;background:var(--soft);color:var(--muted);flex:none}
+.navbtn.done .num{background:var(--accent);color:#fff}
+.navbtn.on .num{box-shadow:0 0 0 2px var(--accent)}
+.navbtn small{display:block;color:var(--muted);font-size:.74rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+.step-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.step-head h2{margin:0;font-size:1.3rem}
+.step-head p{margin:4px 0 0;color:var(--muted);max-width:640px}
+.prog{font-size:.85rem;color:var(--muted);white-space:nowrap}
+.prog b{color:var(--ink)}
+.grid2{display:grid;grid-template-columns:1fr 250px;gap:18px;margin-top:16px;align-items:start}
+@media (max-width:760px){.grid2{grid-template-columns:1fr}}
+.diagram{background:var(--soft);border-radius:12px;padding:8px;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:520px;height:auto}
+.locator{background:var(--soft);border-radius:12px;padding:10px;text-align:center}
+.locator svg{width:100%;max-width:250px;height:auto}
+.locator p{margin:6px 0 0;font-size:.78rem;color:var(--muted)}
+table{width:100%;border-collapse:collapse;margin-top:18px;font-size:.9rem}
+th{text-align:left;color:var(--muted);font-weight:600;font-size:.76rem;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.row{cursor:pointer}
+tr.row:hover td{background:var(--soft)}
+tr.row.done td{opacity:.55}
+tr.row.done td.chk{opacity:1}
+td.chk{width:38px}
+.box{width:22px;height:22px;border-radius:6px;border:2px solid var(--line);display:grid;place-items:center;font-size:14px;font-weight:800;color:#fff}
+tr.done .box{background:var(--accent);border-color:var(--accent)}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:650;padding:2px 9px;border-radius:99px;white-space:nowrap}
+.badge i{width:14px;height:4px;border-radius:2px;display:inline-block}
+.b-sig{background:color-mix(in srgb,var(--sig) 14%,transparent);color:var(--sig)}
+.b-v5{background:color-mix(in srgb,var(--v5) 14%,transparent);color:var(--v5)}
+.b-v33{background:color-mix(in srgb,var(--v33) 18%,transparent);color:var(--v33)}
+.b-gnd{background:color-mix(in srgb,var(--gnd) 12%,transparent);color:var(--gnd)}
+.b-none,.b-usb{background:color-mix(in srgb,var(--none) 16%,transparent);color:var(--muted)}
+td .sub{display:block;color:var(--muted);font-size:.8rem;margin-top:2px}
+.note{margin-top:14px;border-radius:10px;padding:11px 14px;font-size:.9rem}
+.note.tip{background:var(--accent-soft)}
+.note.warn{background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-line)}
+.note.danger{background:var(--danger-bg);color:var(--danger-ink);border:1px solid var(--danger-line)}
+.note b{font-weight:700}
+.note ul{margin:6px 0 0;padding-left:18px}
+.pager{display:flex;justify-content:space-between;gap:10px;margin-top:20px}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:9px 16px;cursor:pointer;font-weight:600}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:disabled{opacity:.4;cursor:default}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:.8rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:22px;height:4px;border-radius:2px;display:inline-block}
+.prep{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:16px}
+.prep .card{padding:14px 16px}
+.prep h3{margin:0 0 6px;font-size:1rem}
+.prep ul{margin:0;padding-left:18px;font-size:.9rem}
+.prep p{margin:0;font-size:.9rem}
+code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);padding:1px 6px;border-radius:5px}
+.overview img{width:100%;border-radius:10px;border:1px solid var(--line);margin-top:12px;background:#fff}
+.cmds td:first-child{white-space:nowrap}
+.reset{background:none;border:0;color:var(--muted);font-size:.8rem;cursor:pointer;text-decoration:underline;padding:0;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Smart Mini-Greenhouse · ESP32</div>
+    <h1>Panduan wiring langkah demi langkah</h1>
+    <p>Pilih mode daya, lalu ikuti tiap langkah. Klik baris kabel untuk menandainya sudah terpasang.</p>
+  </header>
+
+  <div class="modes" id="modes"></div>
+
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main id="main"></main>
+  </div>
+</div>
+
+<script>
+(() => {
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('gh-wiring:' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('gh-wiring:' + k, JSON.stringify(v)); } catch {} }
+};
+
+const MODES = {
+  tes:   { label: 'Tes di meja', sub: 'ESP32 dari USB laptop. Relay, pompa, servo dari adaptor / powerbank.' },
+  usb:   { label: 'Tanpa adaptor (sementara)', sub: 'Semua dari USB laptop lewat pin VIN. Servo hanya tes singkat.' },
+  kotak: { label: 'Di dalam kotak', sub: 'Semua dari adaptor / powerbank. Laptop tidak dicolok.' },
+};
+let mode = store.get('mode', 'tes');
+if (!MODES[mode]) mode = 'tes';
+let checks = store.get('checks', {});
+
+const T = {
+  get v5()  { return mode === 'usb' ? { to: 'Titik 5V', sub: 'kolom breadboard yang tersambung ke pin VIN' } : { to: 'Titik 5V', sub: 'sekrup + DC jack adaptor / kabel merah powerbank' }; },
+  get gnd() { return mode === 'usb' ? { to: 'Titik GND', sub: 'kolom breadboard yang tersambung ke pin GND ESP32' } : { to: 'Titik GND', sub: 'sekrup − DC jack / kolom GND breadboard' }; },
+};
+const esp = (label, sub) => ({ to: 'ESP32 · ' + label, sub });
+
+const LEFT  = ['EN','VP','VN','D34','D35','D32','D33','D25','D26','D27','D14','D12','D13','GND','VIN'];
+const RIGHT = ['D23','D22','TX0','RX0','D21','D19','D18','D5','TX2','RX2','D4','D2','D15','GND','3V3'];
+
+const KIND = {
+  sig:  { name: 'Sinyal', cls: 'b-sig',  color: 'var(--sig)' },
+  v5:   { name: '5V',     cls: 'b-v5',   color: 'var(--v5)' },
+  v33:  { name: '3V3',    cls: 'b-v33',  color: 'var(--v33)' },
+  gnd:  { name: 'GND',    cls: 'b-gnd',  color: 'var(--gnd)' },
+  none: { name: 'Kosong', cls: 'b-none', color: 'var(--none)' },
+  usb:  { name: 'USB',    cls: 'b-usb',  color: 'var(--usb)' },
+};
+
+function steps() {
+  const power = {
+    tes: [
+      { from: 'Adaptor +', kind: 'v5', ...T.v5, note: 'Ini sumber semua 5V untuk relay, pompa, servo.' },
+      { from: 'Adaptor −', kind: 'gnd', ...T.gnd },
+      { from: 'ESP32 GND', fromSub: 'pin GND sisi VIN', kind: 'gnd', ...T.gnd, pin: 'L:GND', note: 'Wajib. Menyatukan ground ESP32 dengan adaptor.' },
+      { from: 'ESP32 VIN', kind: 'none', to: 'JANGAN disambung', sub: 'ESP32 sudah dapat daya dari USB', pin: 'L:VIN' },
+      { from: 'ESP32 USB', kind: 'usb', to: 'Laptop', sub: 'daya ESP32 + upload + Serial Monitor' },
+    ],
+    usb: [
+      { from: 'ESP32 VIN', fromSub: 'keluar ±5V dari USB', kind: 'v5', ...T.v5, pin: 'L:VIN', note: 'Jumper dari kolom pin VIN ke kolom kosong → jadi Titik 5V.' },
+      { from: 'ESP32 GND', fromSub: 'pin GND sisi VIN', kind: 'gnd', ...T.gnd, pin: 'L:GND', note: 'Jumper dari kolom pin GND ke kolom kosong → jadi Titik GND.' },
+      { from: 'ESP32 USB', kind: 'usb', to: 'Laptop', sub: 'satu-satunya sumber daya' },
+    ],
+    kotak: [
+      { from: 'Adaptor +', kind: 'v5', ...T.v5 },
+      { from: 'Adaptor −', kind: 'gnd', ...T.gnd },
+      { from: 'ESP32 VIN', kind: 'v5', ...T.v5, pin: 'L:VIN', note: 'Sekarang ESP32 dapat daya dari adaptor.' },
+      { from: 'ESP32 GND', fromSub: 'pin GND sisi VIN', kind: 'gnd', ...T.gnd, pin: 'L:GND' },
+      { from: 'ESP32 USB', kind: 'none', to: 'Tidak dicolok', sub: 'cabut kabel VIN dulu kalau mau upload ulang' },
+    ],
+  }[mode];
+
+  return [
+    { id: 'persiapan', title: 'Persiapan', short: 'alat & istilah', prep: true },
+    {
+      id: 'daya', title: 'Titik daya', short: '5V & GND bersama',
+      intro: 'Buat dua "titik" tempat banyak kabel bertemu: Titik 5V dan Titik GND. Semua komponen besar mengambil daya dari sini.',
+      card: 'Sumber daya', rows: power,
+      notes: mode === 'usb'
+        ? [['warn', '<b>Mode sementara.</b> Port USB laptop hanya kuat ±0,5–1,5 A. Sensor, relay, dan pompa (tes 1–3 detik) aman. Servo bisa membuat ESP32 restart. Kalau itu terjadi, cabut servo dan tunggu adaptor.']]
+        : mode === 'tes'
+        ? [['danger', '<b>Jangan sambungkan + adaptor ke VIN</b> selama ESP32 dicolok ke laptop. Dua sumber daya bisa merusak port USB.'],
+           ['tip', 'Breadboard mini tidak punya jalur +/−. Pakai <b>sekrup + dan − di DC jack</b> sebagai titik 5V dan GND (1 sekrup bisa 2–3 kabel), atau satu kolom kosong breadboard untuk masing-masing.']]
+        : [['warn', '<b>Upload ulang di dalam kotak:</b> cabut kabel VIN (atau adaptor) dulu, baru colok USB laptop.']],
+    },
+    {
+      id: 'tanah', title: 'Sensor kelembapan tanah', short: 'capacitive v1.2',
+      intro: 'Sensor tanah memakai 3V3 dari ESP32 dan mengirim nilai analog ke D34.',
+      card: 'Soil Moisture v1.2',
+      rows: [
+        { from: 'VCC', kind: 'v33', ...esp('3V3', 'ujung bawah sisi kanan, dekat USB'), pin: 'R:3V3' },
+        { from: 'AOUT', kind: 'sig', ...esp('D34', 'sisi kiri, pin ke-4 dari atas'), pin: 'L:D34' },
+        { from: 'GND', kind: 'gnd', ...esp('GND', 'sisi kanan, di atas 3V3'), pin: 'R:GND' },
+      ],
+      notes: [['tip', '3V3 dan GND sisi kanan dipakai bersama dengan DHT22. Colok kabelnya ke lubang breadboard <b>di kolom yang sama</b> dengan pin 3V3 / GND ESP32, atau tarik jumper ke kolom kosong supaya muat untuk 2 sensor.']],
+    },
+    {
+      id: 'dht', title: 'DHT22', short: 'suhu & kelembapan udara',
+      intro: 'DHT22 juga memakai 3V3. Data masuk ke D13.',
+      card: 'DHT22 (modul 3 pin)',
+      rows: [
+        { from: '+ / VCC', kind: 'v33', ...esp('3V3', 'sama dengan VCC sensor tanah'), pin: 'R:3V3' },
+        { from: 'OUT / DATA', kind: 'sig', ...esp('D13', 'sisi kiri, di atas GND'), pin: 'L:D13' },
+        { from: '− / GND', kind: 'gnd', ...esp('GND', 'sisi kanan, di atas 3V3'), pin: 'R:GND' },
+      ],
+      notes: [['tip', 'Urutan pin di modul DHT22 berbeda-beda. Ikuti <b>tulisan di board-nya</b> (+, OUT, −), bukan posisinya. Kalau DHT22 polos 4 kaki (bukan modul), tambahkan resistor 10 kΩ dari DATA ke 3V3.']],
+    },
+    {
+      id: 'relay', title: 'Relay — pin kontrol', short: 'header VCC · IN · GND',
+      intro: 'Tiga pin header di bawah relay untuk menghidupkan dan memicu relay.',
+      card: 'Relay 1 channel',
+      rows: [
+        { from: 'VCC', kind: 'v5', ...T.v5 },
+        { from: 'IN', kind: 'sig', ...esp('D14', 'sisi kiri, di atas D12'), pin: 'L:D14' },
+        { from: 'GND', kind: 'gnd', ...T.gnd },
+      ],
+      notes: [['tip', '<b>Jumper biru (JD_VCC–VCC) tetap terpasang.</b> Relay aktif saat IN = LOW, sesuai <code>RELAY_ACTIVE_LOW true</code>. Lampu kecil D1 menyala saat relay aktif.']],
+    },
+    {
+      id: 'pompa', title: 'Relay — pompa', short: 'terminal sekrup',
+      intro: 'Relay hanya memutus/menyambung kabel + pompa. Kabel hitam pompa tidak lewat relay.',
+      card: 'Terminal relay & pompa',
+      rows: [
+        { from: 'COM', fromSub: 'lubang tengah', kind: 'v5', ...T.v5 },
+        { from: 'NO', fromSub: 'lubang dekat tulisan "1 Relay Module"', kind: 'v5', to: 'Kabel MERAH pompa', sub: 'masuk ke sekrup NO' },
+        { from: 'NC', fromSub: 'lubang ujung satunya', kind: 'none', to: 'Dibiarkan kosong', sub: '' },
+        { from: 'Kabel HITAM pompa', kind: 'gnd', ...T.gnd, note: 'Pilin, masukkan ke ujung female jumper, bungkus isolasi.' },
+      ],
+      notes: [
+        ['warn', '<b>Cek sekali:</b> colok daya tanpa memicu relay (lampu D1 mati). Pompa harus <b>diam</b>. Kalau langsung menyala, kabel merah masuk ke NC. Cabut daya, pindahkan ke lubang ujung satunya.'],
+        ['tip', 'Pompa celup harus terendam air setiap kali dinyalakan. Selang arahkan ke gelas, bukan ke pot, saat tes.'],
+      ],
+    },
+    {
+      id: 'servo', title: 'Servo MG996R + kapasitor', short: 'tutup atap',
+      intro: 'Servo mengambil daya langsung dari Titik 5V, sinyal dari D18. Kapasitor meredam lonjakan arus.',
+      card: 'Servo MG996R',
+      rows: [
+        { from: 'Oranye', fromSub: 'sinyal', kind: 'sig', ...esp('D18', 'sisi kanan, pin ke-7 dari atas'), pin: 'R:D18' },
+        { from: 'Merah', fromSub: 'VCC', kind: 'v5', ...T.v5, note: 'Jangan ke pin 3V3 ESP32.' },
+        { from: 'Coklat', fromSub: 'GND', kind: 'gnd', ...T.gnd },
+        { from: 'Kapasitor kaki +', fromSub: 'kaki panjang / tanpa strip', kind: 'v5', ...T.v5, note: 'Sedekat mungkin dengan kabel servo.' },
+        { from: 'Kapasitor kaki −', fromSub: 'sisi bergaris strip', kind: 'gnd', ...T.gnd },
+      ],
+      notes: mode === 'usb'
+        ? [['danger', '<b>Mode tanpa adaptor:</b> tes servo tanpa beban (horn belum dipasang ke tutup), gerakan kecil saja. Kalau ESP32 restart atau Mac memberi peringatan USB, cabut servo.']]
+        : [['tip', 'Tes pertama tanpa horn terpasang ke tutup. Begitu ESP32 menyala, servo langsung ke sudut tertutup (90°).']],
+    },
+    { id: 'cek', title: 'Cek & tes', short: 'sebelum menyalakan', final: true },
+  ];
+}
+
+const els = { modes: document.getElementById('modes'), nav: document.getElementById('nav'), main: document.getElementById('main') };
+let current = 0;
+
+function key(stepId, i) { return mode + ':' + stepId + ':' + i; }
+function stepProgress(s) {
+  if (!s.rows) return null;
+  const done = s.rows.filter((_, i) => checks[key(s.id, i)]).length;
+  return { done, total: s.rows.length };
+}
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function renderModes() {
+  els.modes.innerHTML = Object.entries(MODES).map(([k, m]) =>
+    `<button class="mode ${k === mode ? 'on' : ''}" data-mode="${k}" aria-pressed="${k === mode}"><b>${m.label}</b><span>${m.sub}</span></button>`).join('');
+  els.modes.querySelectorAll('.mode').forEach((b) => b.onclick = () => { mode = b.dataset.mode; store.set('mode', mode); render(); });
+}
+
+function renderNav(list) {
+  els.nav.innerHTML = list.map((s, i) => {
+    const p = stepProgress(s);
+    const done = p && p.done === p.total;
+    return `<button class="navbtn ${i === current ? 'on' : ''} ${done ? 'done' : ''}" data-i="${i}">
+      <span class="num">${done ? '✓' : i}</span><span>${esc(s.title)}<small>${p ? p.done + '/' + p.total + ' kabel' : esc(s.short)}</small></span></button>`;
+  }).join('');
+  els.nav.querySelectorAll('.navbtn').forEach((b) => b.onclick = () => go(+b.dataset.i));
+}
+
+function diagram(s) {
+  const rowH = 66, top = 54, h = top + s.rows.length * rowH + 10, W = 680;
+  const lx = 14, lw = 214, rx = 432, rw = 234;
+  let out = `<svg viewBox="0 0 ${W} ${h}" role="img" aria-label="Diagram kabel ${esc(s.title)}">`;
+  out += `<rect x="${lx}" y="12" width="${lw}" height="${h - 22}" rx="12" fill="var(--card)" stroke="var(--line)" stroke-width="1.5"/>`;
+  out += `<text x="${lx + 16}" y="38" font-size="15" font-weight="700" fill="var(--ink)">${esc(s.card)}</text>`;
+  s.rows.forEach((r, i) => {
+    const y = top + i * rowH + rowH / 2;
+    const k = KIND[r.kind];
+    const done = checks[key(s.id, i)];
+    const dash = r.kind === 'none' ? ' stroke-dasharray="8 7"' : '';
+    out += `<g class="wire" data-i="${i}" style="cursor:pointer;opacity:${done ? .45 : 1}">`;
+    out += `<text x="${lx + 16}" y="${y + (r.fromSub ? -2 : 5)}" font-size="14" font-weight="700" fill="var(--ink)">${esc(r.from)}</text>`;
+    if (r.fromSub) out += `<text x="${lx + 16}" y="${y + 15}" font-size="11.5" fill="var(--muted)">${esc(r.fromSub)}</text>`;
+    out += `<line x1="${lx + lw}" y1="${y}" x2="${rx}" y2="${y}" stroke="${k.color}" stroke-width="5" stroke-linecap="round"${dash}/>`;
+    out += `<rect x="${lx + lw - 7}" y="${y - 7}" width="14" height="14" rx="3" fill="${k.color}"/>`;
+    out += `<rect x="${rx - 7}" y="${y - 7}" width="14" height="14" rx="3" fill="${k.color}"/>`;
+    out += `<circle cx="${(lx + lw + rx) / 2}" cy="${y}" r="12" fill="var(--card)" stroke="${k.color}" stroke-width="2"/>`;
+    out += `<text x="${(lx + lw + rx) / 2}" y="${y + 4.5}" font-size="12" font-weight="800" text-anchor="middle" fill="${k.color}">${done ? '✓' : i + 1}</text>`;
+    out += `<rect x="${rx + 10}" y="${y - 25}" width="${rw}" height="50" rx="10" fill="var(--card)" stroke="${k.color}" stroke-width="1.5"/>`;
+    out += `<text x="${rx + 24}" y="${y + (r.sub ? -3 : 5)}" font-size="14" font-weight="700" fill="var(--ink)">${esc(r.to)}</text>`;
+    if (r.sub) out += `<text x="${rx + 24}" y="${y + 14}" font-size="11.5" fill="var(--muted)">${esc(r.sub.length > 35 ? r.sub.slice(0, 34) + '…' : r.sub)}</text>`;
+    out += `</g>`;
+  });
+  return out + '</svg>';
+}
+
+function locator(s) {
+  const used = {};
+  s.rows.forEach((r, i) => { if (r.pin) (used[r.pin] ||= []).push({ n: i + 1, color: KIND[r.kind].color }); });
+  const pitch = 22, y0 = 92, W = 240, bx = 62, bw = 116;
+  const h = y0 + 14 * pitch + 66;
+  let o = `<svg viewBox="0 0 ${W} ${h}" role="img" aria-label="Letak pin di ESP32">`;
+  o += `<rect x="${bx}" y="20" width="${bw}" height="${h - 50}" rx="10" fill="var(--board)"/>`;
+  o += `<rect x="${bx + 18}" y="28" width="${bw - 36}" height="44" rx="4" fill="#9ca3af" opacity=".55"/>`;
+  o += `<text x="${bx + bw / 2}" y="55" font-size="10.5" text-anchor="middle" fill="var(--board-ink)" font-weight="700">antena</text>`;
+  o += `<rect x="${bx + bw / 2 - 16}" y="${h - 34}" width="32" height="18" rx="3" fill="#9ca3af"/>`;
+  o += `<text x="${bx + bw / 2}" y="${h - 4}" font-size="10.5" text-anchor="middle" fill="var(--muted)">USB</text>`;
+  const side = (names, isLeft) => names.forEach((n, i) => {
+    const y = y0 + i * pitch, x = isLeft ? bx + 9 : bx + bw - 9;
+    const u = used[(isLeft ? 'L:' : 'R:') + n];
+    o += `<circle cx="${x}" cy="${y}" r="4.5" fill="${u ? u[0].color : 'var(--board-dim)'}"/>`;
+    o += `<text x="${isLeft ? x + 9 : x - 9}" y="${y + 3.5}" font-size="10" font-family="ui-monospace,Menlo,monospace" text-anchor="${isLeft ? 'start' : 'end'}" fill="${u ? 'var(--board-ink)' : 'var(--board-dim)'}" font-weight="${u ? 800 : 400}">${n}</text>`;
+    if (u) u.forEach((b, j) => {
+      const cx = isLeft ? bx - 14 - j * 22 : bx + bw + 14 + j * 22;
+      o += `<line x1="${isLeft ? bx : bx + bw}" y1="${y}" x2="${cx}" y2="${y}" stroke="${b.color}" stroke-width="2"/>`;
+      o += `<circle cx="${cx}" cy="${y}" r="9" fill="${b.color}"/><text x="${cx}" y="${y + 3.8}" font-size="10.5" font-weight="800" text-anchor="middle" fill="var(--card)">${b.n}</text>`;
+    });
+  });
+  side(LEFT, true); side(RIGHT, false);
+  return o + '</svg>';
+}
+
+function notes(list) {
+  return (list || []).map(([t, html]) => `<div class="note ${t}">${html}</div>`).join('');
+}
+
+function renderStep(list) {
+  const s = list[current];
+  let html = `<div class="card">`;
+  const p = stepProgress(s);
+  html += `<div class="step-head"><div><h2>${current}. ${esc(s.title)}</h2>${s.intro ? `<p>${esc(s.intro)}</p>` : ''}</div>${p ? `<div class="prog"><b>${p.done}</b> / ${p.total} kabel terpasang</div>` : ''}</div>`;
+
+  if (s.prep) {
+    html += `<div class="prep">
+      <div class="card"><h3>Komponen</h3><ul><li>ESP32 DevKit (30 pin)</li><li>Soil moisture capacitive v1.2</li><li>DHT22</li><li>Relay 1 channel 5V</li><li>Pompa celup 5V + selang</li><li>Servo MG996R</li><li>Kapasitor 470–1000 µF</li><li>Adaptor 5V 3A + DC jack, atau powerbank ≥2,4 A</li></ul></div>
+      <div class="card"><h3>Kabel jumper</h3><ul><li><b>Male–male</b>: breadboard ↔ breadboard, soket servo</li><li><b>Female–male</b>: pin header relay & sensor ↔ breadboard, kabel hitam pompa</li><li>Saran warna: <b style="color:var(--v5)">merah</b> = 5V, <b style="color:var(--v33)">kuning/oranye</b> = 3V3, <b>hitam/coklat</b> = GND, warna lain = sinyal</li></ul></div>
+      <div class="card"><h3>Titik 5V & Titik GND</h3><p>Tempat banyak kabel bertemu. Breadboard mini tidak punya jalur +/−, jadi pakai <b>sekrup + / − di DC jack</b>, atau <b>satu kolom breadboard</b> (5 lubang satu kolom tersambung) untuk masing-masing.</p></div>
+      <div class="card"><h3>Mode yang dipilih</h3><p><b>${esc(MODES[mode].label)}</b> — ${esc(MODES[mode].sub)} Ganti mode di atas kapan saja; langkah 1 dan catatan menyesuaikan.</p></div>
+    </div>
+    <div class="legend"><span><i style="background:var(--sig)"></i>Sinyal ke GPIO</span><span><i style="background:var(--v5)"></i>5V</span><span><i style="background:var(--v33)"></i>3V3 dari ESP32</span><span><i style="background:var(--gnd)"></i>GND</span><span><i style="background:var(--none)"></i>Tidak disambung</span></div>
+    ${notes([['danger', '<b>Selalu cabut semua daya</b> (USB dan adaptor) setiap kali memindah kabel.']])}`;
+  } else if (s.final) {
+    html += notes([
+      ['warn', '<b>Sebelum mencolok daya:</b><ul><li>Tidak ada kabel 5V yang masuk ke pin 3V3 ESP32 atau VCC sensor.</li><li>Kaki − kapasitor ke GND (sisi bergaris strip).</li><li>GND ESP32 tersambung ke Titik GND.</li>' + (mode === 'tes' ? '<li>VIN ESP32 <b>tidak</b> tersambung ke 5V adaptor.</li>' : '') + '<li>Pompa terendam air, selang ke gelas.</li><li>Horn servo belum dipasang ke tutup.</li></ul>'],
+    ]);
+    html += `<h3 style="margin:20px 0 6px;font-size:1rem">Urutan tes lewat Serial Monitor (115200, Newline)</h3>
+    <table class="cmds"><thead><tr><th>Ketik</th><th>Yang harus terjadi</th></tr></thead><tbody>
+      <tr><td><code>status</code></td><td>Angka tanah dan suhu muncul. <code>valid=1</code> untuk keduanya.</td></tr>
+      <tr><td><code>cal</code></td><td>Sensor di udara → catat (kering). Sensor dicelup air → catat (basah). Isi di dashboard.</td></tr>
+      <tr><td><code>pump 1000</code></td><td>Relay klik, lampu D1 menyala, pompa jalan 1 detik.</td></tr>
+      <tr><td><code>lid 100</code> lalu <code>lid 90</code></td><td>Servo bergerak pelan 10° lalu kembali. ESP32 tidak restart.</td></tr>
+      <tr><td><code>pump 10000</code></td><td>Ukur ml air di gelas ÷ 10 = debit pompa (ml/s). Isi di dashboard.</td></tr>
+    </tbody></table>
+    ${notes([['tip', 'ESP32 restart saat servo/pompa bergerak? Cek kapasitor, pastikan merah servo ke Titik 5V (bukan ke ESP32), dan sumber daya ≥2 A.']])}
+    <div class="overview"><h3 style="margin:22px 0 0;font-size:1rem">Skema lengkap</h3><img src="skema.png" alt="Skema wiring lengkap ESP32 smart mini-greenhouse"></div>
+    <button class="reset" id="reset">Hapus semua centang</button>`;
+  } else {
+    html += `<div class="grid2"><div class="diagram">${diagram(s)}</div><div class="locator">${locator(s)}<p>Letak pin di ESP32 (antena di atas, USB di bawah). Nomor = nomor kabel.</p></div></div>`;
+    html += `<table><thead><tr><th></th><th>#</th><th>Dari</th><th>Ke</th><th>Jenis</th></tr></thead><tbody>`;
+    s.rows.forEach((r, i) => {
+      const k = KIND[r.kind];
+      const done = checks[key(s.id, i)];
+      html += `<tr class="row ${done ? 'done' : ''}" data-i="${i}">
+        <td class="chk"><div class="box">${done ? '✓' : ''}</div></td>
+        <td>${i + 1}</td>
+        <td><b>${esc(r.from)}</b>${r.fromSub ? `<span class="sub">${esc(r.fromSub)}</span>` : ''}</td>
+        <td><b>${esc(r.to)}</b>${r.sub ? `<span class="sub">${esc(r.sub)}</span>` : ''}${r.note ? `<span class="sub">${esc(r.note)}</span>` : ''}</td>
+        <td><span class="badge ${k.cls}"><i style="background:${k.color}"></i>${k.name}</span></td></tr>`;
+    });
+    html += `</tbody></table>${notes(s.notes)}`;
+  }
+
+  html += `<div class="pager"><button class="btn" id="prev" ${current === 0 ? 'disabled' : ''}>← Sebelumnya</button>
+    <button class="btn primary" id="next" ${current === list.length - 1 ? 'disabled' : ''}>Berikutnya →</button></div></div>`;
+  els.main.innerHTML = html;
+
+  const toggle = (i) => { const k = key(s.id, i); checks[k] = !checks[k]; store.set('checks', checks); render(); };
+  els.main.querySelectorAll('tr.row, g.wire').forEach((el) => el.addEventListener('click', () => toggle(+el.dataset.i)));
+  document.getElementById('prev').onclick = () => go(current - 1);
+  document.getElementById('next').onclick = () => go(current + 1);
+  const reset = document.getElementById('reset');
+  if (reset) reset.onclick = () => { checks = {}; store.set('checks', checks); render(); };
+}
+
+function go(i) {
+  const list = steps();
+  current = Math.max(0, Math.min(list.length - 1, i));
+  const id = list[current].id;
+  if (location.hash !== '#' + id) history.replaceState(null, '', '#' + id);
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function render() {
+  const list = steps();
+  renderModes();
+  renderNav(list);
+  renderStep(list);
+}
+
+function fromHash() {
+  const id = location.hash.slice(1);
+  const i = steps().findIndex((s) => s.id === id);
+  current = i >= 0 ? i : 0;
+  render();
+}
+window.addEventListener('hashchange', fromHash);
+fromHash();
+})();
+</script>
+</body>
+</html>

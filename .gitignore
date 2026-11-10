@@ -1,0 +1,10 @@
+node_modules/
+.next/
+.env
+.env.local
+firmware/smart_greenhouse/config.h
+*.tsbuildinfo
+next-env.d.ts
+.vercel/
+.DS_Store
+Claude outputs/
