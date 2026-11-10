@@ -333,6 +333,7 @@ void runCommand(JsonObjectConst c) {
 }
 
 // ───────────────────────── Jaringan ─────────────────────────
+int lastHttpCode = 0; uint32_t lastHttpMs = 0; bool serverOk = false;
 WiFiClientSecure tlsClient;
 WiFiClient plainClient;
 
@@ -385,7 +386,11 @@ void syncCloud() {
   http.addHeader("Content-Type", "application/json");
   http.addHeader("x-device-key", DEVICE_KEY);
 
+  uint32_t t0 = millis();
   int code = http.POST(body);
+  lastHttpCode = code; lastHttpMs = millis() - t0;
+  if (code == 200 && !serverOk) Serial.printf("[net] terhubung ke server ✓ (%lu ms)\n", (unsigned long)lastHttpMs);
+  serverOk = (code == 200);
   if (code == 200) {
     // hapus event yang sudah terkirim (event baru selama request tetap di antrean)
     memmove(evq, evq + sentEvents, sizeof(Event) * (evN - sentEvents));
@@ -422,6 +427,7 @@ void printStatus() {
                 S.manual ? "manual" : "auto", dosesLastHour(), tankWarning);
   Serial.printf("siram otomatis=%s\n", S.manual ? "mati (mode manual)" : autoPumpPaused ? "DIJEDA (auto off)" : "aktif");
   Serial.printf("wifi=%s rssi=%d queue=%d\n", WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "-", WiFi.RSSI(), evN);
+  Serial.printf("server=%s | http terakhir=%d (%lu ms)\n", SERVER_URL, lastHttpCode, (unsigned long)lastHttpMs);
 }
 
 void handleSerial() {

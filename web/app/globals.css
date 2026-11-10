@@ -94,6 +94,8 @@ input:focus { outline: 2px solid #b9dcc5; border-color: var(--green); }
 .seg button:disabled { cursor: not-allowed; }
 .seg button:disabled:not(.on) { opacity: 0.45; }
 .seg4 { grid-template-columns: repeat(4, 1fr); }
+.seg2 { grid-template-columns: repeat(2, 1fr); }
+.lock-note { font-size: 0.85rem; color: #6b5a1e; background: #fbf5e2; border: 1px solid #efe2b5; border-radius: 8px; padding: 8px 10px; margin-bottom: 0; }
 .speed-row { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; display: grid; gap: 8px; }
 .angle-row { padding: 8px 0; border-top: 1px solid var(--line); }
 .angle-row:first-of-type { border-top: 0; }

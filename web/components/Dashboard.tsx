@@ -110,22 +110,24 @@ export default function Dashboard({ id }: { id: string }) {
       <section className="two-col">
         <div className="card">
           <h3>Kontrol</h3>
-          <div className="row between">
-            <div>
-              <strong>Mode {manual ? "manual" : "otomatis"}</strong>
-              <p className="muted small">
-                {manual ? "Pompa dan ventilasi dikendalikan dari web." : "ESP32 menyiram dan membuka ventilasi berdasarkan threshold."}
-              </p>
-            </div>
-            <button className={`switch ${manual ? "on" : ""}`} disabled={busy !== null}
-                    aria-label="Ganti mode" onClick={() => saveSettings({ mode: manual ? "auto" : "manual" }, `Mode diubah ke ${manual ? "otomatis" : "manual"}`)}>
-              <span />
+          <p className="small" style={{ marginBottom: 6 }}><strong>Mode kontrol</strong></p>
+          <div className="seg seg2">
+            <button className={!manual ? "on" : ""} disabled={busy !== null || !manual}
+                    onClick={() => saveSettings({ mode: "auto" }, "Mode diubah ke otomatis")}>
+              🤖 Otomatis<small>ikut sensor</small>
+            </button>
+            <button className={manual ? "on" : ""} disabled={busy !== null || manual}
+                    onClick={() => saveSettings({ mode: "manual" }, "Mode diubah ke manual")}>
+              🖐️ Manual<small>kontrol dari web</small>
             </button>
           </div>
+          {!manual && (
+            <p className="lock-note mt">🔒 Kontrol terkunci selama mode otomatis. Pilih <strong>Manual</strong> untuk menyiram atau menggerakkan tutup.</p>
+          )}
           <div className="row gap wrap mt">
             <button className="btn primary" disabled={!manual || busy !== null}
                     onClick={() => command("pump_dose", { ms: s.dose_ms }, `Perintah siram ${s.dose_ms / 1000} s dikirim`)}>
-              💧 Siram 1 dosis
+              {manual ? "💧" : "🔒"} Siram 1 dosis
             </button>
           </div>
           <p className="small mt" style={{ marginBottom: 6 }}><strong>Posisi tutup</strong></p>
@@ -138,7 +140,7 @@ export default function Dashboard({ id }: { id: string }) {
                     onClick={() => command("lid", { position: "open" }, "Perintah buka ventilasi dikirim")}>
               Open<small>{s.lid_open_deg}°</small>
             </button>
-            <button className={lidMaint ? "on" : ""} disabled={busy !== null || lidMaint}
+            <button className={lidMaint ? "on" : ""} disabled={!manual || busy !== null || lidMaint}
                     onClick={() => command("lid", { position: "maintenance" }, "Mode maintenance: tutup diangkat")}>
               Maintenance<small>{s.lid_maint_deg}°</small>
             </button>
@@ -150,8 +152,8 @@ export default function Dashboard({ id }: { id: string }) {
             </button>
           )}
           <p className="muted small mt">
-            {manual ? "Mode manual: pompa dan posisi tutup dikendalikan dari web."
-                    : "Mode otomatis: Open/Close diatur sensor. Maintenance tetap bisa dipakai kapan saja; selama maintenance tutup tidak digerakkan otomatis."}
+            {manual ? "Mode manual: siram, Open, Close, dan Maintenance dikendalikan dari web. Penyiraman & ventilasi otomatis dimatikan."
+                    : "Mode otomatis: ESP32 menyiram dan membuka/menutup ventilasi berdasarkan threshold sensor."}
           </p>
         </div>
 
