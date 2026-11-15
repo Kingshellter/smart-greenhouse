@@ -43,6 +43,7 @@ constexpr uint32_t POLL_INTERVAL_MS  = 3000;   // sync ke server (ambil perintah
 constexpr uint32_t DHT_INTERVAL_MS   = 2500;   // DHT22 maks 1x per 2 detik
 constexpr uint32_t SOIL_INTERVAL_MS  = 1000;
 constexpr uint32_t SERVO_HOLD_MS     = 600;    // jeda setelah sampai sebelum HTTP boleh jalan lagi (servo TIDAK di-detach)
+constexpr uint32_t SERVO_STEP_MS     = 5;      // kecepatan servo tetap: 5 ms per 1° (sangat cepat, tetap bertahap agar tutup tidak terbanting)
 constexpr int      SOIL_RAW_MIN_OK   = 100;    // di luar rentang ini = sensor lepas/korslet
 constexpr int      SOIL_RAW_MAX_OK   = 4000;
 constexpr int      DHT_MAX_FAILS     = 3;      // NaN berturut-turut sebelum dianggap invalid
@@ -68,7 +69,6 @@ struct Settings {
   int      lidClosedDeg    = 90, lidOpenDeg = 135, lidMaintDeg = 180;
   int      soilRawDry      = 3000, soilRawWet = 1300;
   uint32_t reportIntervalS = 10;
-  uint32_t servoStepMs     = 15;     // kecepatan servo: ms per 1° (makin besar makin pelan, diatur dari web)
 };
 Settings S;
 Preferences prefs;
@@ -97,6 +97,7 @@ int lidAngle(LidPos p) { return p == LID_OPEN ? S.lidOpenDeg : p == LID_MAINT ? 
 int  servoPos = -1, servoTarget = -1;
 bool servoAttached = false;
 uint32_t servoLastStep = 0, servoArrivedMs = 0;
+uint32_t lastSettingsMs = 0;   // kapan setting terakhir diterima dari server (0 = belum pernah sejak boot)
 uint32_t lidOverrideUntil = 0;   // millis() sampai kapan kontrol otomatis tutup ditahan
 
 bool stateChanged = true;   // kirim reading segera di sync berikutnya
@@ -219,7 +220,7 @@ void updateServo() {
   if (!servoAttached) return;
   uint32_t now = millis();
   if (servoPos != servoTarget) {
-    if (now - servoLastStep >= S.servoStepMs) {
+    if (now - servoLastStep >= SERVO_STEP_MS) {
       servoLastStep = now;
       servoPos += (servoTarget > servoPos) ? 1 : -1;
       servo.write(servoPos);
@@ -304,6 +305,7 @@ void loadSettings() {
 
 void applySettings(JsonObjectConst o) {
   if (o.isNull()) return;
+  lastSettingsMs = millis();
   Settings n = S;
   if (o["mode"].is<const char*>()) n.manual = strcmp(o["mode"].as<const char*>(), "manual") == 0 ? 1 : 0;
   if (o["soil_dry_pct"].is<float>())       n.soilDryPct      = o["soil_dry_pct"];
@@ -320,7 +322,6 @@ void applySettings(JsonObjectConst o) {
   if (o["soil_raw_dry"].is<float>())       n.soilRawDry      = o["soil_raw_dry"];
   if (o["soil_raw_wet"].is<float>())       n.soilRawWet      = o["soil_raw_wet"];
   if (o["report_interval_s"].is<float>())  n.reportIntervalS = o["report_interval_s"];
-  if (o["servo_step_ms"].is<float>())      n.servoStepMs     = constrain(o["servo_step_ms"].as<int>(), 5, 100);
 
   bool modeChanged = n.manual != S.manual;
   bool lidAnglesChanged = n.lidClosedDeg != S.lidClosedDeg || n.lidOpenDeg != S.lidOpenDeg || n.lidMaintDeg != S.lidMaintDeg;
@@ -446,6 +447,9 @@ void printStatus() {
   Serial.printf("pump=%s lid=%s servo=%d (closed=%d open=%d maint=%d) mode=%s doses/h=%d tank_warning=%d\n",
                 pumpOn ? "ON" : "off", lidName(lidPos), servoTarget, S.lidClosedDeg, S.lidOpenDeg, S.lidMaintDeg,
                 S.manual ? "manual" : "auto", dosesLastHour(), tankWarning);
+  Serial.printf("servo pos=%d target=%d | setting server terakhir: ", servoPos, servoTarget);
+  if (lastSettingsMs) Serial.printf("%lu s lalu\n", (unsigned long)((millis() - lastSettingsMs) / 1000));
+  else Serial.println("belum pernah sejak boot");
   Serial.printf("siram otomatis=%s\n", S.manual ? "mati (mode manual)" : autoPumpPaused ? "DIJEDA (auto off)" : "aktif");
   Serial.printf("wifi=%s rssi=%d queue=%d\n", WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "-", WiFi.RSSI(), evN);
   Serial.printf("server=%s | http terakhir=%d (%lu ms)\n", SERVER_URL, lastHttpCode, (unsigned long)lastHttpMs);

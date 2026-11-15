@@ -30,7 +30,6 @@ create table if not exists device_settings (
   lid_closed_deg      int     not null default 90,
   lid_open_deg        int     not null default 135,
   lid_maint_deg       int     not null default 180,  -- posisi maintenance (tutup terangkat ±90°)
-  servo_step_ms       int     not null default 15,   -- kecepatan servo: ms per 1° (makin besar makin pelan)
   -- kalibrasi sensor tanah (nilai ADC mentah)
   soil_raw_dry        int     not null default 3000,
   soil_raw_wet        int     not null default 1300,

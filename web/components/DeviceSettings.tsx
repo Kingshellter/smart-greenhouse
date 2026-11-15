@@ -4,14 +4,11 @@
 
 import { useEffect, useState } from "react";
 import type { Settings } from "@/lib/settings";
-import { Seg } from "./ui";
 import { BlockHead } from "./SettingsBlock";
-
-const SPEEDS: [string, number][] = [["Cepat", 10], ["Normal", 15], ["Pelan", 30], ["Sangat pelan", 50]];
 
 type Save = (patch: Partial<Settings>, okText?: string) => void;
 
-/** Sudut servo (tiap klik langsung disimpan) + kecepatan gerak tutup. */
+/** Sudut servo (tiap klik langsung disimpan). Kecepatan servo tetap di firmware (SERVO_STEP_MS). */
 export function ServoSettings({ settings: s, onSave }: { settings: Settings; onSave: Save }) {
   return (
     <section className="setblock">
@@ -21,18 +18,6 @@ export function ServoSettings({ settings: s, onSave }: { settings: Settings; onS
           <AngleRow label="Tertutup" value={s.lid_closed_deg} onChange={(v) => onSave({ lid_closed_deg: v }, `Sudut tertutup = ${v}°`)} />
           <AngleRow label="Terbuka" value={s.lid_open_deg} onChange={(v) => onSave({ lid_open_deg: v }, `Sudut terbuka = ${v}°`)} />
           <AngleRow label="Maintenance" value={s.lid_maint_deg} onChange={(v) => onSave({ lid_maint_deg: v }, `Sudut maintenance = ${v}°`)} />
-        </div>
-        <div className="speed-row">
-          <span>Kecepatan servo</span>
-          <Seg<string>
-            value={String(s.servo_step_ms)}
-            onSelect={(k) => onSave({ servo_step_ms: Number(k) }, `Kecepatan servo: ${SPEEDS.find(([, ms]) => String(ms) === k)?.[0]}`)}
-            options={SPEEDS.map(([label, ms]) => ({
-              key: String(ms),
-              label,
-              sub: `${((ms * Math.abs(s.lid_maint_deg - s.lid_closed_deg)) / 1000).toFixed(1)} s`,
-            }))}
-          />
         </div>
       </fieldset>
     </section>

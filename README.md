@@ -143,7 +143,7 @@ Skema lengkap: `docs/skema_wiring_esp32_greenhouse.png`
 - **Batas waktu pompa:** tiap kali menyala dibatasi timer hardware, dan maksimal mutlak 10 s walaupun loop tertahan.
 - **Stop rule:** jumlah dosis otomatis per jam dibatasi. Jika batas tercapai tapi tanah masih kering, muncul peringatan *Cek tangki air*.
 - **Sensor tidak valid:** jika sensor tanah di luar rentang atau DHT22 gagal 3× berturut-turut, pompa otomatis berhenti dan tidak ada dosis baru.
-- **Servo:** bergerak pelan (default 1°/15 ms, diatur lewat `servo_step_ms`) supaya tutup tidak terbanting, dan sudutnya dibatasi maksimal 90° dari posisi tertutup. Setelah sampai, servo sengaja **tidak** di-*detach*: sinyal PWM tetap menahan posisi, karena sebagian MG996R meluncur sendiri ke ujung saat sinyal dilepas dan tutup bisa melorot karena beratnya. Posisi terakhir disimpan di NVS, jadi setelah restart (mis. brownout) servo tidak melompat.
+- **Servo:** bergerak cepat tapi bertahap (tetap 1°/5 ms, konstanta `SERVO_STEP_MS` di firmware) supaya tutup tidak terbanting, dan sudutnya dibatasi maksimal 90° dari posisi tertutup. Setelah sampai, servo sengaja **tidak** di-*detach*: sinyal PWM tetap menahan posisi, karena sebagian MG996R meluncur sendiri ke ujung saat sinyal dilepas dan tutup bisa melorot karena beratnya. Posisi terakhir disimpan di NVS, jadi setelah restart (mis. brownout) servo tidak melompat.
 - **HTTP:** tidak dijalankan saat pompa atau servo sedang bergerak.
 
 ## 4. Urutan tes (sesuai handoff)

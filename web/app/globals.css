@@ -602,7 +602,6 @@ input:focus, select:focus { outline: 3px solid rgba(24, 160, 88, 0.18); border-c
 .angle-row { padding: 10px 0; border-top: 1px solid var(--line); }
 .angle-row:first-of-type { border-top: 0; }
 .angle { min-width: 48px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 550; }
-.speed-row { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; display: grid; gap: 8px; }
 
 .tabs { display: inline-flex; background: var(--surface); box-shadow: var(--edge); border-radius: 12px; padding: 3px; gap: 2px; }
 .tabs button { border: 0; background: transparent; padding: 5px 12px; border-radius: 9px; font: inherit; font-size: 0.84rem; cursor: pointer; color: var(--muted); transition: color 0.2s, background 0.2s; }

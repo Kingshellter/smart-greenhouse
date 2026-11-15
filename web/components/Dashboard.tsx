@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ago, api, prefetch, usePoll } from "@/lib/client";
 import type { ActuatorEvent, DeviceState } from "@/lib/types";
-import type { Settings } from "@/lib/settings";
+import { SERVO_DEG_PER_S, type Settings } from "@/lib/settings";
 import type { Preset, PresetValues } from "@/lib/presets";
 import { navigate, transitionReady } from "@/lib/transition";
 import PresetPicker from "./PresetPicker";
@@ -273,7 +273,7 @@ export default function Dashboard({ id }: { id: string }) {
               tones={tones}
               online={device.online}
               tankWarning={!!r?.tank_warning}
-              degPerSec={1000 / s.servo_step_ms}
+              degPerSec={SERVO_DEG_PER_S}
               onReady={transitionReady}
             />
             {/* pilihan mode: tiga tombol mengambang terpisah di bawah model, samar sampai disentuh kursor */}

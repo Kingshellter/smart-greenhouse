@@ -14,7 +14,6 @@ export type Settings = {
   lid_closed_deg: number;
   lid_open_deg: number;
   lid_maint_deg: number;
-  servo_step_ms: number;
   soil_raw_dry: number;
   soil_raw_wet: number;
   report_interval_s: number;
@@ -33,14 +32,16 @@ export const NUMERIC_LIMITS: Record<Exclude<keyof Settings, "mode">, [number, nu
   lid_closed_deg: [0, 180],
   lid_open_deg: [0, 180],
   lid_maint_deg: [0, 180],
-  servo_step_ms: [5, 100],
   soil_raw_dry: [0, 4095],
   soil_raw_wet: [0, 4095],
   report_interval_s: [2, 300],
   pump_flow_ml_s: [0, 100],
 };
 
-export const SETTINGS_COLUMNS = ["mode", ...Object.keys(NUMERIC_LIMITS)] as (keyof Settings)[];
+/** Kecepatan servo tutup (°/s) untuk animasi 3D. Tetap, sama dengan SERVO_STEP_MS = 5 ms/° di firmware. */
+export const SERVO_DEG_PER_S = 1000 / 5;
+
+export const SETTINGS_COLUMNS =["mode", ...Object.keys(NUMERIC_LIMITS)] as (keyof Settings)[];
 
 /** Validasi patch parsial, gabungkan dengan setting lama. Return error string atau setting baru. */
 export function mergeSettings(current: Settings, patch: Record<string, unknown>): Settings | string {

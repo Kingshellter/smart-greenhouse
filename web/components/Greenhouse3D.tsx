@@ -24,7 +24,7 @@ export type GreenhouseState = {
   soilPct: number | null;
   online: boolean;
   tankWarning: boolean;
-  /** Kecepatan servo asli (derajat per detik), dari servo_step_ms. */
+  /** Kecepatan servo asli (derajat per detik), lihat SERVO_DEG_PER_S. */
   degPerSec: number;
   /** Isi kartu tiap titik info (hotspot). Tanpa ini, model tampil tanpa titik info. */
   cards?: Record<HotspotKind, ReactNode>;
