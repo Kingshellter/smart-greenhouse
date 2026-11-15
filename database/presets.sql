@@ -28,6 +28,10 @@ begin
   if exists (select 1 from pg_roles where rolname = 'greenhouse_app') then
     grant select, insert, update, delete on plant_presets to greenhouse_app;
     grant usage, select on sequence plant_presets_id_seq to greenhouse_app;
+    -- RLS aktif: tanpa policy, role app melihat tabel kosong (sama seperti tabel lain)
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'plant_presets' and policyname = 'app_all') then
+      create policy app_all on plant_presets for all to greenhouse_app using (true) with check (true);
+    end if;
   end if;
 end $$;
 
