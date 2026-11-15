@@ -13,7 +13,7 @@ import { SERIES } from "@/lib/chart";
 import type { Badge } from "./Greenhouse3D";
 import { Icon, type IconName } from "./icons";
 import { Gauge, gaugeFor, Seg, Tabs } from "./ui";
-import { DayBars, MiniArea } from "./charts";
+import { DayBars, MiniArea } from "./Charts";
 
 
 /** Kenapa kontrol terkunci (null = bisa dipakai). `toManual` = jalan pintas pindah mode dari kartu. */

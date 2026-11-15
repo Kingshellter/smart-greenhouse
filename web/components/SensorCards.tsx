@@ -12,7 +12,7 @@ import { SERIES } from "@/lib/chart";
 import { rangeLabel, rangePollMs, useRange } from "@/lib/range";
 import type { Badge } from "./Greenhouse3D";
 import { Icon, type IconName } from "./icons";
-import { MiniArea } from "./charts";
+import { MiniArea } from "./Charts";
 
 export default function SensorCards({ id, state, soilBadge, tempBadge, humBadge }: {
   id: string; state: DeviceState; soilBadge?: Badge; tempBadge?: Badge; humBadge?: Badge;
