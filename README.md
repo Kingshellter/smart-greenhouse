@@ -1,6 +1,6 @@
 # Smart Mini-Greenhouse — IoT
 
-Prototipe Smart Mini-Greenhouse Berbasis IoT untuk Pemantauan Iklim Mikro dan Otomasi Irigasi Presisi.
+Prototype Smart Mini-Greenhouse Berbasis IoT untuk Pemantauan Iklim Mikro dan Otomasi Irigasi Presisi.
 ESP32 + sensor tanah kapasitif + DHT22 + pompa (relay) + servo MG996R. Data dikirim ke cloud dan database milik sendiri, lalu ditampilkan di dashboard web dengan modul analitik. Proyek ini tidak memakai Blynk atau ThingSpeak.
 
 ```
