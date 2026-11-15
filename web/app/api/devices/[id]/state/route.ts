@@ -13,7 +13,7 @@ export async function GET(_req: Request, { params }: Ctx) {
   if (!device) return bad("Node tidak ditemukan", 404);
 
   const [[settings], [reading], [pending]] = await Promise.all([
-    sql`select ${sql(SETTINGS_COLUMNS)}, updated_at from device_settings where device_id = ${id}`,
+    sql`select ${sql(SETTINGS_COLUMNS)}, preset_id, updated_at from device_settings where device_id = ${id}`,
     sql`select * from readings where device_id = ${id} order by ts desc limit 1`,
     sql`select count(*)::int as n from commands where device_id = ${id} and status = 'pending'`,
   ]);

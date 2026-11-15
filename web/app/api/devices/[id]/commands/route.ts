@@ -1,7 +1,8 @@
 // POST /api/devices/:id/commands
 //   { type: "pump_dose", payload: { ms: 3000 } }
 //   { type: "lid", payload: { position: "open" | "closed" | "maintenance" | "exit_maintenance" } }
-// Mode manual: semua perintah. Mode otomatis: semua terkunci, kecuali keluar dari maintenance.
+// Mode manual: semua perintah. Mode otomatis: semua terkunci, kecuali masuk/keluar maintenance
+// (sama dengan runCommand() di firmware: maintenance boleh di mode apa pun).
 // ESP32 mengambilnya pada sync berikutnya;
 // perintah yang tidak terambil dalam 60 s kedaluwarsa.
 
@@ -19,8 +20,8 @@ export async function POST(req: Request, { params }: Ctx) {
   const [s] = await sql`select mode, dose_ms from device_settings where device_id = ${id}`;
   if (!s) return bad("Node tidak ditemukan", 404);
   const p = (b.payload ?? {}) as Record<string, unknown>;
-  const exitMaint = b.type === "lid" && p.position === "exit_maintenance";
-  if (s.mode !== "manual" && !exitMaint) return bad("Ubah ke mode manual dulu untuk kontrol langsung", 409);
+  const maint = b.type === "lid" && (p.position === "maintenance" || p.position === "exit_maintenance");
+  if (s.mode !== "manual" && !maint) return bad("Ubah ke mode manual dulu untuk kontrol langsung", 409);
 
   let payload: Record<string, unknown>;
   if (b.type === "pump_dose") {

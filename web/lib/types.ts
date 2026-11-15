@@ -16,7 +16,7 @@ export type Reading = {
 
 export type DeviceState = {
   device: { id: string; name: string; last_seen: string | null; online: boolean };
-  settings: Settings & { updated_at: string };
+  settings: Settings & { preset_id: number | null; updated_at: string };
   reading: Reading | null;
   pending_commands: number;
 };

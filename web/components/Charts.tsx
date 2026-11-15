@@ -1,78 +1,79 @@
 "use client";
 
-import { useState } from "react";
-import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { fmtAxis, fmtDateTime, usePoll } from "@/lib/client";
-import type { SeriesPoint } from "@/lib/types";
-import type { Settings } from "@/lib/settings";
+// Grafik kecil yang dipakai di kartu hotspot: area riwayat sensor dan batang harian.
 
-const RANGES = ["1h", "6h", "24h", "7d"] as const;
-const C = { soil: "#2f7d4f", hum: "#3b82c4", temp: "#d9622b", pump: "#3b82c4", lid: "#d9a12b" };
+import { Area, AreaChart, Bar, BarChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { fmtDateTime } from "@/lib/client";
+import type { Analytics, DailyStat, SeriesPoint } from "@/lib/types";
+import { AXIS, GRID, TOOLTIP_STYLE } from "@/lib/chart";
 
-export default function Charts({ id, settings }: { id: string; settings: Settings }) {
-  const [range, setRange] = useState<(typeof RANGES)[number]>("1h");
-  const { data } = usePoll<SeriesPoint[]>(`/api/devices/${id}/readings?range=${range}`, range === "1h" ? 10_000 : 60_000);
-  const long = range === "7d" || range === "24h";
-  const rows = data ?? [];
-  const tick = (t: string) => fmtAxis(t, long);
-  const tip = { labelFormatter: (t: unknown) => fmtDateTime(String(t)), contentStyle: { borderRadius: 8, fontSize: 13 } };
-
+/** `compact` = versi kecil di kartu sensor kiri: tanpa label garis ambang, tinggi mengikuti wadahnya. */
+export function MiniArea({ rows, loading, dataKey, color, unit, label, domain, refY, refLabel, compact }: {
+  rows: SeriesPoint[] | null | undefined; loading: boolean; dataKey: keyof SeriesPoint; color: string; unit: string; label: string;
+  domain?: [number, number]; refY?: number; refLabel?: string; compact?: boolean;
+}) {
+  const has = !!rows?.some((p) => p[dataKey] != null);
+  if (!has) return <div className="chart-empty mini">{loading ? "Memuat…" : compact ? "—" : "Belum ada data"}</div>;
+  const gid = `fill-${String(dataKey)}`;
   return (
-    <section className="card">
-      <div className="row between wrap">
-        <h3>Riwayat sensor</h3>
-        <div className="tabs">
-          {RANGES.map((r) => (
-            <button key={r} className={r === range ? "active" : ""} onClick={() => setRange(r)}>{r}</button>
-          ))}
-        </div>
-      </div>
-      {rows.length === 0 ? (
-        <p className="muted empty">Belum ada data pada rentang ini.</p>
-      ) : (
-        <div className="chart-grid">
-          <figure>
-            <figcaption>Kelembapan tanah & udara (%) <Legend items={[["Tanah", C.soil], ["Udara", C.hum]]} /></figcaption>
-            <ResponsiveContainer width="100%" height={240}>
-              <ComposedChart data={rows} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                <CartesianGrid stroke="#e7e9e3" vertical={false} />
-                <XAxis dataKey="t" tickFormatter={tick} minTickGap={40} fontSize={12} stroke="#8a8f85" />
-                <YAxis domain={[0, 100]} fontSize={12} stroke="#8a8f85" />
-                <Tooltip {...tip} formatter={(v) => `${v}%`} />
-                <ReferenceLine y={settings.soil_dry_pct} stroke={C.soil} strokeDasharray="4 4" />
-                <Line type="monotone" dataKey="soil_pct" name="Tanah" stroke={C.soil} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-                <Line type="monotone" dataKey="humidity_pct" name="Udara" stroke={C.hum} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </figure>
-          <figure>
-            <figcaption>Suhu udara (°C) <Legend items={[["Suhu", C.temp], ["Ventilasi terbuka", C.lid]]} /></figcaption>
-            <ResponsiveContainer width="100%" height={240}>
-              <ComposedChart data={rows} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                <CartesianGrid stroke="#e7e9e3" vertical={false} />
-                <XAxis dataKey="t" tickFormatter={tick} minTickGap={40} fontSize={12} stroke="#8a8f85" />
-                <YAxis yAxisId="t" domain={["dataMin - 2", "dataMax + 2"]} allowDecimals={false} fontSize={12} stroke="#8a8f85" />
-                <YAxis yAxisId="lid" orientation="right" hide domain={[0, 1]} />
-                <Tooltip {...tip} formatter={(v, n) => (n === "Ventilasi" ? (v ? "terbuka" : "tertutup") : `${v}°C`)} />
-                <Area yAxisId="lid" type="stepAfter" dataKey="lid_open" name="Ventilasi" fill={C.lid} fillOpacity={0.15} stroke="none" isAnimationActive={false} />
-                <ReferenceLine yAxisId="t" y={settings.temp_open_c} stroke={C.temp} strokeDasharray="4 4" />
-                <Line yAxisId="t" type="monotone" dataKey="temperature_c" name="Suhu" stroke={C.temp} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </figure>
-        </div>
-      )}
-      <p className="muted small">Garis putus-putus = threshold siram dan threshold buka ventilasi.</p>
-    </section>
+    <div className="mini-chart">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={rows ?? []} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={color} stopOpacity={compact ? 0.22 : 0.28} />
+              <stop offset="1" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <XAxis dataKey="t" hide />
+          <YAxis hide domain={domain ?? ["dataMin - 2", "dataMax + 2"]} />
+          <Tooltip
+            labelFormatter={(t) => fmtDateTime(String(t))}
+            formatter={(v) => [`${v}${unit}`, label]}
+            contentStyle={TOOLTIP_STYLE}
+            cursor={{ stroke: color, strokeOpacity: 0.3 }}
+          />
+          {refY != null && (
+            <ReferenceLine y={refY} stroke={color} strokeOpacity={0.6} strokeDasharray="3 3" ifOverflow="extendDomain"
+                           label={compact ? undefined : { value: `${refLabel} ${refY}${unit}`, position: "insideTopRight", fontSize: 10, fill: "#9aa197" }} />
+          )}
+          <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={1.8} fill={`url(#${gid})`} connectNulls isAnimationActive={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
-function Legend({ items }: { items: [string, string][] }) {
+const shortDay = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
+
+/** API hanya mengirim hari yang ada datanya; isi hari kosong supaya grafik selalu menampilkan `days` batang. */
+function fillDays(data: Analytics): DailyStat[] {
+  const byDay = new Map(data.daily.map((d) => [d.day, d]));
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+  const base = Date.parse(`${today}T00:00:00Z`);
+  return Array.from({ length: Math.max(data.days, 1) }, (_, i) => {
+    const day = new Date(base - (data.days - 1 - i) * 86_400_000).toISOString().slice(0, 10);
+    return byDay.get(day) ?? { day, pump_runs: 0, pump_auto: 0, pump_ms: 0, water_ml: null, lid_opens: 0, safety_stops: 0 };
+  });
+}
+
+export function DayBars({ data, bars, empty, unit = "", compact }: {
+  data: Analytics | null | undefined; empty: string; unit?: string; compact?: boolean;
+  bars: { key: (d: DailyStat) => number; name: string; color: string }[];
+}) {
+  if (!data || data.daily.length === 0) return <div className="chart-empty mini">{data ? (compact ? "—" : empty) : "Memuat…"}</div>;
   return (
-    <span className="legend">
-      {items.map(([l, c]) => (
-        <span key={l}><i style={{ background: c }} />{l}</span>
-      ))}
-    </span>
+    <div className="mini-chart bars">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={fillDays(data)} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+          <XAxis dataKey="day" tickFormatter={shortDay} {...AXIS} minTickGap={16} hide={compact} />
+          <Tooltip labelFormatter={(d) => shortDay(String(d))} formatter={(v) => `${v}${unit}`} contentStyle={TOOLTIP_STYLE} cursor={{ fill: GRID }} />
+          {bars.map((b, i) => (
+            <Bar key={b.name} dataKey={b.key} name={b.name} stackId="s" fill={b.color} maxBarSize={22} isAnimationActive={false}
+                 radius={i === bars.length - 1 ? [5, 5, 0, 0] : undefined} />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

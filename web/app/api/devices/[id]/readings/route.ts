@@ -1,4 +1,4 @@
-// GET /api/devices/:id/readings?range=1h|6h|24h|7d
+// GET /api/devices/:id/readings?range=1h|6h|24h|3d|7d|30d
 // Data di-downsample per bucket waktu supaya grafik ringan.
 
 import { sql } from "@/lib/db";
@@ -11,14 +11,16 @@ const RANGES: Record<string, { range: string; bucket: string }> = {
   "1h": { range: "1 hour", bucket: "30 seconds" },
   "6h": { range: "6 hours", bucket: "2 minutes" },
   "24h": { range: "24 hours", bucket: "5 minutes" },
+  "3d": { range: "3 days", bucket: "15 minutes" },
   "7d": { range: "7 days", bucket: "30 minutes" },
+  "30d": { range: "30 days", bucket: "2 hours" },
 };
 
 export async function GET(req: Request, { params }: Ctx) {
   const { id } = await params;
   const key = new URL(req.url).searchParams.get("range") ?? "1h";
   const r = RANGES[key];
-  if (!r) return bad("range harus 1h, 6h, 24h, atau 7d");
+  if (!r) return bad("range harus 1h, 6h, 24h, 3d, 7d, atau 30d");
 
   const rows = await sql`
     select date_bin(${r.bucket}::interval, ts, timestamptz '2000-01-01') as t,

@@ -1,0 +1,76 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+Smart Mini-Greenhouse: an ESP32 node (soil sensor, DHT22, relay pump, MG996R servo lid) that reports to a self-hosted Next.js API + PostgreSQL, with a web dashboard and analytics. It is a university IoT prototype, so the README maps features to course requirements. No Blynk/ThingSpeak by design.
+
+**Language:** code comments, UI copy, API error messages and docs are in Indonesian. Keep new text in Indonesian to match.
+
+## Commands
+
+All web commands run from `web/`:
+
+```bash
+npm run dev          # Next.js dev server, http://localhost:3000 (needs DATABASE_URL in web/.env.local)
+npm run build        # production build
+npx tsc --noEmit     # typecheck: the only static check (no linter, no test suite)
+npm run db:init      # apply ../database/schema.sql + presets.sql to $DATABASE_URL
+npm run db:check     # test DB connection from .env.local; auto-fixes Supabase aws-0/aws-1 pooler host
+npm run simulate -- --url http://localhost:3000 --id gh-01 --key <api_key>   # fake ESP32 (tools/simulate-esp32.mjs)
+bash scripts/vercel-setup.sh   # push env vars from .env.local to Vercel and deploy prod
+```
+
+Without hardware, verify changes end to end by running the simulator against the dev server. Its data is fake: clear the `readings`, `actuator_events` and `commands` tables afterwards.
+
+Firmware (`firmware/smart_greenhouse/`) is built with the Arduino IDE (board "ESP32 Dev Module"; libs: Adafruit DHT + Unified Sensor, ESP32Servo, ArduinoJson v7). It needs `config.h` copied from `config.example.h` (gitignored). There is no CLI build here, so firmware changes can't be compiled locally. Say so rather than claiming they build.
+
+`.claude/launch.json` defines a `web` preview server (`npm --prefix web run dev`, port 3000).
+
+## Architecture
+
+```
+ESP32 ──POST /api/ingest every 3 s (x-device-key)──▶ Next.js route ──▶ Postgres
+  ▲                                                   │
+  └──── response: { settings, commands } ◀────────────┘
+Browser ── polls /api/devices/:id/* every 3 s ──▶ same API
+```
+
+### The ESP32 is the source of truth for control
+All automatic decisions run **on the device** (`autoControl()` in the `.ino`) and keep working offline: soil threshold → one pump dose → soak wait → re-read; max doses/hour (stop rule, raises `tank_warning`); lid ventilation with temperature/RH hysteresis. The server never decides actuator actions. It only stores data and relays settings and manual commands. Safety limits live in firmware constants (`PUMP_HARD_MAX_MS` 10 s, `LID_MAX_SWING` 90°, `BOOT_GRACE_MS`, invalid-sensor pump stop), not on the server.
+
+### Sync protocol (`web/app/api/ingest/route.ts` ↔ `syncCloud()` in firmware ↔ `tools/simulate-esp32.mjs`)
+- The request carries an optional `reading` (sent every `report_interval_s` or on any state change) and a queue of `events` with `age_ms`. The server turns `age_ms` back into the real event timestamp.
+- The response returns the full settings row plus pending `commands`. Commands go `pending → sent` on pickup and `expired` after 60 s (`COMMAND_TTL_S`), so a node that reconnects late won't run stale actions.
+- These three implementations must stay in lockstep. A protocol change touches all of them.
+
+### Settings flow: one name, four places
+A setting's DB column name = the JSON field sent to the ESP32 = the key in `web/lib/settings.ts`. Adding or changing a setting means updating:
+1. `database/schema.sql` (`device_settings`). For existing DBs, add an idempotent `alter table … add column if not exists`, as `presets.sql` does. Both SQL files are written to be safely re-runnable.
+2. `web/lib/settings.ts`: `Settings` type + `NUMERIC_LIMITS`. `SETTINGS_COLUMNS` is derived from it and controls what `/api/ingest` and `/state` select. `mergeSettings()` holds the cross-field rules (close < open hysteresis, lid swing ≤ 90°, dry/wet calibration ≥ 200 apart).
+3. Firmware: `struct Settings` + `applySettings()`. Settings persist to NVS as a raw struct blob checked by `sizeof`, so changing the struct silently resets stored settings to defaults on next boot.
+4. The simulator's default `S` object, and the dashboard UI (field lists in `SettingsBlock.tsx`; plant thresholds are edited in `PresetPicker.tsx`, device calibration in the per-device popups of `DeviceBar.tsx` + `DeviceSettings.tsx`).
+
+Plant presets (`database/presets.sql`, `web/lib/presets.ts`) only cover plant-dependent fields (`PRESET_FIELDS`: soil threshold + temp/RH hysteresis), never device calibration. Built-in presets are read-only.
+
+### Modes and manual control
+`mode` is `auto | manual`. In auto, `/api/devices/:id/commands` rejects everything (409) except `lid maintenance` / `lid exit_maintenance`. The firmware (`runCommand()`) and the simulator enforce the same rule independently. Maintenance (lid raised for access) is not a stored mode: it is a lid position that works in any mode and pauses auto ventilation. The dashboard's control bar shows it as a third option (Otomatis / Manual / Maintenance) and leaves maintenance with `exit_maintenance`. Lid angles are raw servo degrees calibrated per device (`lid_closed_deg/open/maint`). The firmware stores the last lid position in NVS so the servo doesn't jump after a brownout restart.
+
+### Web app (`web/`, Next.js 16 App Router, React 19)
+- The dashboard fits one screen without page scroll (≥1024 px wide and ≥640 px tall; below that it stacks and scrolls). Three columns, right wider than left, plus a full-width bottom row: left = title (no back link: the brand logo in the nav goes back to the node list; a long name is not truncated but runs over the 3D stage, with `pointer-events: none` so orbiting still works), system status card and three sensor tiles; the title is pinned to the top of the column (level with the plant card; both side columns start 40 px below the stage top, 18 px on short screens, and the event log absorbs it) while the status card and tiles stack from the bottom, so spare height sits between the title and the status card. The status card is the only coloured card on the page and its colour is the state (`ok` green gradient / `warn` amber / `off` dark): headline = first issue, one visible `short` line, all issues with full text in an ⓘ tooltip that opens beside the card (over it when stacked). Tiles (`SensorCards.tsx`: soil / temperature / RH with a 24 h mini chart; `compact` variants of the `charts.tsx` charts) are label + status, value + the threshold in use, then a full-width chart; under 800 px tall the chart moves beside the value. While the node is offline the sensor values are dimmed and the status badge is replaced by the data age (`stale`), because the last reading is not live. The nav shows the brand, the node id and a Live/Offline pill with the data age; center = 3D stage with the mode choice as three small separate floating buttons at the bottom of the stage (`.mode-float`, at 55 % opacity until hovered or focused; solid and transform-free: a `backdrop-filter` over the animating canvas made them shimmer); right = plant card, event log (`EventLog.tsx`: icon bubble per action type, trigger under the text, time on the right, one sticky header per day; the right column scrolls internally if a row is expanded). The history range (`1h…30d`) is one shared setting in `lib/range.ts` (a module store with `useSyncExternalStore`, not React context, because drei `<Html>` renders hotspot cards in a separate root; remembered in localStorage): changing it in a popup or hotspot card also changes the left tiles. Charts and the lid/pump controls live in the 3D hotspot cards (`HotspotCards.tsx`, charts in `charts.tsx`): soil/air show the value on a `Gauge` (tick scale with the thresholds that trigger automation, `gaugeFor` in `ui.tsx`), history (range tabs) and today's min/avg/max; the air card switches between temperature and RH with two value tabs; pump shows 7-day bars + Siram (`DayBars` pads missing days, since `/analytics` only returns days with data), lid shows 7-day open % + Tutup/Buka. Lid and pump hotspots are greyed (`locked`) and their buttons disabled outside manual mode or during maintenance; the card then shows a `Lock` note, with a "Ke Manual" shortcut when the cause is auto mode. The bottom row (grid area `bar`, full width under all three columns) is `DeviceBar.tsx`: one card with a centered column per device (soil sensor, DHT22, pump, lid servo, tank, WiFi: name, icon, status + dot); a column opens that device's popup: the same hotspot card node built in `Dashboard.tsx` (`cards`, passed to `DeviceBar`: value, threshold gauge, history with range tabs, today's stats, controls), then analytics numbers and its calibration (soil ADC with the live raw reading, pump dose, servo angles/speed in `DeviceSettings.tsx`, stop rule, report interval). The plant popup (`PresetPicker.tsx`) has a fixed size; header and footer (`Terapkan <nama>`) stay fixed while the body scrolls: compact preset tiles, then the chosen preset's three thresholds as draggable scales (`GaugeSlider` in `ui.tsx`, fixed min–max so the scale doesn't move while dragging) with typed inputs (`NumField`) below. Edited values apply as preset + settings patch (`applyPreset` in `Dashboard.tsx`). `SettingsBlock` inputs take min/max from `NUMERIC_LIMITS` and show hints while editing. There is no detail popup. If the ESP32 doesn't confirm a lid command within 25 s, the optimistic state reverts with a toast.
+- Pages are thin: `app/page.tsx` → `components/DeviceList.tsx`, `app/devices/[id]/page.tsx` → `components/Dashboard.tsx`. Everything is a client component that polls the API with `usePoll` (`lib/client.ts`), which pauses while the tab is hidden. There are no server components that fetch data.
+- API routes use `postgres.js` through the single pooled `sql` in `lib/db.ts` (`prepare: false` is required for the Supabase transaction pooler; numeric is parsed to `number`). Input validation helpers live in `lib/http.ts` (`num`, `oneOf`, `readJson`, `bad`). Out-of-range sensor values are stored as `null`, not clamped.
+- "Online" means `last_seen` < 30 s ago (computed in `/state` and in `DeviceList`).
+- `proxy.ts` (Next 16's renamed middleware) adds HTTP Basic auth only when `DASHBOARD_USER`/`DASHBOARD_PASSWORD` are set, and exempts `/api/ingest` and `/api/health`.
+- The dashboard shows mode/lid changes optimistically (`pending` state, cleared when a reading confirms or after 25 s). The firmware doesn't report while the pump runs, so the pump animation is replayed from `pump run` events rather than from `pump_state`.
+- Daily analytics bucket by `APP_TZ` (default Asia/Jakarta); client formatting also hardcodes Asia/Jakarta.
+
+### 3D model (`components/Greenhouse3D.tsx`)
+A react-three-fiber model at real scale (1 unit = 1 cm; box 32×20×20 cm, plant chamber left, electronics right, lid hinged at the back edge). It mirrors live state: lid angle animated at the real servo speed (`1000 / servo_step_ms` °/s), soil color, pump flow, tank warning. The look is an aluminium frame + glass; the right (water bottle) chamber has a fixed lid. A `GroundShadow` plane (a canvas-2D texture made once, no extra render pass) grounds the box. `Hotspot` dots (drei `<Html>`, soil / air / pump / tank / lid) carry the icon of their part and show its name on hover; they are green, amber and pulsing when `tones[kind]` is `warn` (dry soil, hot/humid air, tank warning), grey when `locked`. They are hidden cards: tapping one shows its callout card (dashed line + the `cards[kind]` node built in `Dashboard.tsx`), tapping it again or empty canvas (`onPointerMissed`) hides it, and only one is open at a time. The dot wrapper stops click propagation, otherwise the click bubbles to R3F's event root and counts as a miss. Cards are portaled into the `.gh3d` div (outside the canvas's `overflow: hidden`); on open the hotspot measures the room on each side and picks the side/width that fits (`--hc-w`), and `CalloutCard` shifts the card vertically to keep it inside the stage. `CalloutCard` is its own component because drei renders `<Html>` children in a separate React root, so a ref to the card is still null when the `Hotspot`'s own effects run. The open hotspot is raised via `wrapperClass="hs-open"` because drei only recomputes `zIndexRange` when the camera moves, and drei never clears a `wrapperClass`, so it is always set. `CameraFit` shifts the model up when its bottom edge would sit in the mode buttons' room (`BOTTOM_ROOM_PX`), and on tall stages down by half the spare room so an opened lid has space above. The lid hotspot is a child of the rotating lid group. It is loaded via `GreenhouseView.tsx` (`next/dynamic`, `ssr: false`). Page navigation uses the View Transitions API (`lib/transition.ts`): the destination calls `transitionReady()` once the 3D canvas has drawn its first frame. The `Brand` logo is large on the node list (`<Brand large />`) and small in the dashboard nav; its inner `.brand-in` carries `view-transition-name: brand` (not the link, which is stretched by the nav flex) so it shrinks/grows smoothly between pages. Both pages share `max-width: 1480px` (`.page, .dash`) so the logo stays in place; the logo SVG viewBox is cropped to the drawing.
+
+### Styling
+Plain CSS in `app/globals.css` (no Tailwind/CSS modules). Inter is loaded with `next/font` in `app/layout.tsx` (`--font-sans`), so light weights and tabular figures render the same on every OS. Design tokens are on `:root`, and the visual language is frosted "glass" cards on a light grey-green background. Shared UI primitives (`MetricCard`, `Seg` segmented control, `Brand`) are in `components/ui.tsx`.
+
+## Gotchas
+- The servo is intentionally **not** detached after moving (some MG996Rs drift without PWM). Don't "optimize" this by detaching it.
+- `schema.sql` seeds node `gh-01` with a placeholder `api_key`. The firmware `DEVICE_KEY` must match the DB row.
+- New nodes are added from the UI ("Tambah node", `POST /api/devices` generates the key). Firmware only needs a different `DEVICE_ID`/`DEVICE_KEY`.

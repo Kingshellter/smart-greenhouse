@@ -5,21 +5,25 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "db:init": "psql \"$DATABASE_URL\" -f ../database/schema.sql",
+    "db:init": "psql \"$DATABASE_URL\" -f ../database/schema.sql -f ../database/presets.sql",
     "simulate": "node ../tools/simulate-esp32.mjs",
     "db:check": "node scripts/check-db.mjs"
   },
   "dependencies": {
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.2",
     "next": "^16.4.6",
     "postgres": "^4.1.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.187.0",
     "typescript": "^7.0.2"
   },
   "private": true

@@ -15,6 +15,7 @@ Browser ◀── dashboard + analitik (Next.js) ──▶ /api/devices/...
 | `firmware/smart_greenhouse/` | Sketch Arduino ESP32 |
 | `web/` | Backend API dan dashboard web (Next.js 16) |
 | `database/schema.sql` | Skema PostgreSQL (tabel + node pertama) |
+| `database/presets.sql` | Tabel preset tanaman + 7 preset bawaan beserta sumbernya (jalankan setelah `schema.sql`) |
 | `tools/simulate-esp32.mjs` | Simulator ESP32, untuk tes tanpa hardware |
 
 ## Cara kerja
@@ -25,12 +26,14 @@ Browser ◀── dashboard + analitik (Next.js) ──▶ /api/devices/...
    - Setiap aksi pompa, gerakan tutup, pergantian mode, boot, dan safety stop dicatat sebagai event, lengkap dengan waktu kejadian aslinya.
 3. **Server** menyimpan semua data ke PostgreSQL, lalu membalas dengan setting terbaru (threshold, kalibrasi, mode) dan perintah manual yang masih pending.
 4. **Dashboard** menampilkan:
+   - model 3D yang mengikuti kondisi alat
    - status live dan peringatan (tangki air, sensor tidak terbaca, node offline)
-   - grafik riwayat
-   - analitik harian
    - log aktuator
-   - form threshold dan kalibrasi
-   - kontrol manual
+   - titik info di model 3D: ditekan memunculkan kartu berisi nilai sekarang + grafik (riwayat sensor 1 jam–7 hari dengan min/rata/maks hari ini, atau grafik harian pompa/ventilasi). Kartu *Tutup* berisi tombol Tutup/Buka dan kartu *Pompa* tombol Siram; keduanya abu-abu dan terkunci di mode Otomatis/Maintenance
+   - tombol mode mengambang di bawah model: Otomatis / Manual / Maintenance
+   - kartu status sistem (penjelasan di tooltip ⓘ di samping kartu) dan kartu di kiri: tanah, suhu, RH (nilai + grafik 24 jam) dan pompa (penyiraman 7 hari)
+   - baris aktuator di kanan bisa dibuka (pompa, tutup, WiFi): angka analitik
+   - popup tanaman: tab *Tanaman* (preset bergambar, ambang siram/suhu/RH) dan tab *Kalibrasi alat* (ADC tanah, pompa, sudut servo, interval kirim)
 
 > Alur utama prototipe adalah **satu arah**: sensor → ESP32 → cloud → web. Kontrol dari web (mode manual) hanya fitur tambahan. Kalau tidak dipakai saat demo, biarkan mode tetap *otomatis*.
 
@@ -42,7 +45,7 @@ Browser ◀── dashboard + analitik (Next.js) ──▶ /api/devices/...
 | Putuskan aksi otomatis (ESP32) | `autoControl()`: siram per dosis + waktu meresap; ventilasi dengan hysteresis 32/29 °C |
 | Kirim data → simpan → tampilkan | `/api/ingest` → tabel `readings` & `actuator_events` → dashboard |
 | Pengguna: "Perlu bertindak?" | Banner status: normal / cek tangki air / sensor tidak terbaca / node offline |
-| Pilih mode manual → kirim perintah → ESP32 jalankan | Toggle mode + tombol siram/buka/tutup → tabel `commands` → ESP32 mengambilnya saat sync |
+| Pilih mode manual → kirim perintah → ESP32 jalankan | Bar kontrol (Otomatis/Manual/Maintenance) + tombol siram/buka/tutup → tabel `commands` → ESP32 mengambilnya saat sync |
 | Status terbaru tampil | Reading baru dikirim segera setelah ada perubahan state |
 
 ### Kebutuhan dosen
@@ -51,7 +54,7 @@ Browser ◀── dashboard + analitik (Next.js) ──▶ /api/devices/...
 |---|---|---|
 | 2 | Bisa dikembangkan ke banyak node | Setiap data membawa `device_id`. Node baru ditambah lewat halaman awal → *Tambah node* (key dibuat otomatis); firmware cukup diganti `DEVICE_ID`/`DEVICE_KEY`, tanpa ubah kode |
 | 3 | Cloud & web milik sendiri | API Next.js + PostgreSQL buatan tim |
-| 4 | Semua data tersimpan + modul analitik | Tabel `readings`, `actuator_events`, `commands`. Halaman analitik: min/rata/maks harian, frekuensi & durasi pompa, estimasi air, ventilasi dibuka, % waktu ventilasi terbuka, safety stop |
+| 4 | Semua data tersimpan + modul analitik | Tabel `readings`, `actuator_events`, `commands`. Kartu hotspot model 3D (grafik riwayat, min/rata/maks harian, grafik harian pompa & ventilasi) dan baris aktuator yang dibuka: frekuensi & durasi pompa, estimasi air, ventilasi dibuka, % waktu ventilasi terbuka, safety stop |
 
 ## 1. Database
 
@@ -60,7 +63,7 @@ Bisa memakai Supabase (gratis) atau PostgreSQL sendiri (mis. Docker di home serv
 **Supabase:**
 
 1. Buat project baru.
-2. Buka SQL Editor, tempel isi `database/schema.sql`, lalu Run.
+2. Buka SQL Editor, tempel isi `database/schema.sql`, lalu Run. Ulangi untuk `database/presets.sql`.
 3. **Ganti `api_key` node `gh-01`**:
    ```sql
    update devices set api_key = 'isi-key-acak-panjang' where id = 'gh-01';
@@ -73,7 +76,7 @@ RLS sudah diaktifkan tanpa policy, jadi REST API publik Supabase tidak bisa memb
 
 ```bash
 createdb greenhouse
-psql postgresql://user:pass@localhost:5432/greenhouse -f database/schema.sql
+psql postgresql://user:pass@localhost:5432/greenhouse -f database/schema.sql -f database/presets.sql
 ```
 
 ## 2. Web (backend + dashboard)
@@ -130,7 +133,7 @@ Skema lengkap: `docs/skema_wiring_esp32_greenhouse.png`
 | Perintah | Fungsi |
 |---|---|
 | `status` | Semua nilai sensor & state |
-| `cal` | Rata-rata ADC tanah. Catat nilainya di udara (kering) dan di air (basah), lalu isi di dashboard → *Threshold & kalibrasi* |
+| `cal` | Rata-rata ADC tanah. Catat nilainya di udara (kering) dan di air (basah), lalu isi di dashboard → kartu *Tanaman* → tab *Kalibrasi alat* |
 | `pump 3000` | Pompa 3 detik (tes) · `stop` untuk mematikan |
 | `lid open` / `lid close` / `lid 100` | Tes servo |
 
@@ -140,17 +143,17 @@ Skema lengkap: `docs/skema_wiring_esp32_greenhouse.png`
 - **Batas waktu pompa:** tiap kali menyala dibatasi timer hardware, dan maksimal mutlak 10 s walaupun loop tertahan.
 - **Stop rule:** jumlah dosis otomatis per jam dibatasi. Jika batas tercapai tapi tanah masih kering, muncul peringatan *Cek tangki air*.
 - **Sensor tidak valid:** jika sensor tanah di luar rentang atau DHT22 gagal 3× berturut-turut, pompa otomatis berhenti dan tidak ada dosis baru.
-- **Servo:** bergerak pelan 1°/15 ms supaya tutup tidak terbanting, di-*detach* setelah sampai, dan sudutnya dibatasi maksimal 60° dari posisi tertutup.
+- **Servo:** bergerak pelan (default 1°/15 ms, diatur lewat `servo_step_ms`) supaya tutup tidak terbanting, dan sudutnya dibatasi maksimal 90° dari posisi tertutup. Setelah sampai, servo sengaja **tidak** di-*detach*: sinyal PWM tetap menahan posisi, karena sebagian MG996R meluncur sendiri ke ujung saat sinyal dilepas dan tutup bisa melorot karena beratnya. Posisi terakhir disimpan di NVS, jadi setelah restart (mis. brownout) servo tidak melompat.
 - **HTTP:** tidak dijalankan saat pompa atau servo sedang bergerak.
 
 ## 4. Urutan tes (sesuai handoff)
 
 1. Rangkai breadboard sesuai tabel pin. Tes tiap komponen lewat Serial: `status`, `pump 1000`, `lid 100`.
 2. Kalibrasi sensor tanah dengan `cal` (di udara dan di air), lalu isi nilainya di dashboard.
-3. Ukur debit pompa: `pump 10000` ke gelas ukur, bagi 10, lalu isi *Debit pompa* (ml/s).
+3. Ukur debit pompa: `pump 10000` ke gelas ukur, bagi 10, lalu isi *Debit pompa* (ml/s) lewat kartu *Tanaman* → tab *Kalibrasi alat*.
 4. Jalankan servo dan pompa bersamaan, pastikan ESP32 tidak reset.
 5. Tes end-to-end: reading → API → database → dashboard, lalu mode manual → tombol → pompa/tutup.
-6. Di dalam kotak: atur sudut *Tertutup* / *Terbuka* lewat panel *Kalibrasi sudut tutup* (±1°/±5°).
+6. Di dalam kotak: atur sudut *Tertutup* / *Terbuka* lewat kartu *Tanaman* → tab *Kalibrasi alat* (±1°/±5°).
 
 ## API
 
@@ -161,6 +164,9 @@ Skema lengkap: `docs/skema_wiring_esp32_greenhouse.png`
 | GET | `/api/devices/:id/state` | Status terkini + setting |
 | PUT | `/api/devices/:id/settings` | Ubah threshold/kalibrasi/mode |
 | POST | `/api/devices/:id/commands` | `pump_dose` / `lid` (mode manual) |
-| GET | `/api/devices/:id/readings?range=1h\|6h\|24h\|7d` | Riwayat (di-downsample) |
+| GET | `/api/devices/:id/readings?range=1h\|6h\|24h\|3d\|7d\|30d` | Riwayat (di-downsample) |
 | GET | `/api/devices/:id/events` | Log aktuator |
 | GET | `/api/devices/:id/analytics?days=7` | Statistik harian |
+| POST | `/api/devices/:id/preset` | Terapkan preset tanaman `{preset_id}` ke node |
+| GET / POST | `/api/presets` | Daftar preset / buat preset custom |
+| PUT / DELETE | `/api/presets/:pid` | Ubah / hapus preset custom (bawaan hanya-baca) |
