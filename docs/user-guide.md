@@ -22,7 +22,7 @@ Menampilkan semua node beserta nilai terakhir dan status online. Tekan sebuah no
 
 | Bagian | Isi |
 |---|---|
-| Navigasi atas | Logo, id node, tombol 🔔 (notifikasi WhatsApp), penanda *Live* atau *Offline* dengan umur data |
+| Navigasi atas | Logo, id node, tombol 🔔 (notifikasi Telegram), penanda *Live* atau *Offline* dengan umur data (*Live · MQTT* kalau data datang langsung lewat MQTT) |
 | Kiri, **Status Sistem** | Satu-satunya kartu berwarna: hijau normal, kuning perlu perhatian, gelap offline. Ikon ⓘ menampilkan semua masalah dengan penjelasan lengkap |
 | Kiri, tiga kartu sensor | Kelembapan tanah, suhu udara, kelembapan udara: nilai sekarang, ambang yang dipakai, dan grafik 24 jam |
 | Tengah | Model 3D yang meniru kondisi alat (sudut tutup, warna tanah, aliran pompa, peringatan tangki). Tombol mode ada di bawahnya |
@@ -84,11 +84,13 @@ Tekan sebuah perangkat di bar bawah untuk membuka popup-nya: nilai, riwayat, ana
 
 Cara mengukur nilai awalnya ada di [hardware.md](hardware.md#urutan-tes).
 
-## Notifikasi WhatsApp
+## Notifikasi Telegram
 
 ![Notifikasi](laporan/gambar/5-10-notifikasi.png)
 
-Tombol 🔔 di navigasi membuka pengaturan per node: nomor tujuan (pisah koma) dan jenis pesan (tangki kosong, pompa dihentikan pengaman, sensor bermasalah, brownout, offline/online, siram otomatis, ventilasi otomatis). Tombol *Kirim pesan uji* memastikan nomor benar. Instalasi sisi server ada di [setup.md](setup.md#3-notifikasi-whatsapp-opsional-fonnte).
+Tombol 🔔 di navigasi membuka pengaturan per node: chat ID tujuan dan jenis pesan (tangki kosong, pompa dihentikan pengaman, sensor bermasalah, brownout, offline/online, siram otomatis, ventilasi otomatis). Cara menambah penerima: kirim `/start` ke bot dari akun Telegram penerima, tekan *Cari chat ID*, lalu *Pakai* dan *Simpan*. Tombol *Kirim pesan uji* memastikan tujuannya benar. Instalasi sisi server ada di [setup.md](setup.md#3-notifikasi-telegram-opsional).
+
+> Gambar di atas masih tampilan versi WhatsApp; isinya sama kecuali kolom nomor yang kini berupa chat ID.
 
 ## Arti status
 

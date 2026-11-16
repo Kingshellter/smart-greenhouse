@@ -19,13 +19,13 @@ ESP32 ──state + status (LWT)──▶ Broker MQTT ──WebSocket──▶ B
 
 | Dokumen | Isi |
 |---|---|
-| [docs/setup.md](docs/setup.md) | Salinan [Panduan Setup](#panduan-setup) di README ini: database, web, deploy Vercel, variabel environment, WhatsApp, simulator, firmware |
+| [docs/setup.md](docs/setup.md) | Salinan [Panduan Setup](#panduan-setup) di README ini: database, web, deploy Vercel, variabel environment, Telegram, MQTT, simulator, firmware |
 | [docs/hardware.md](docs/hardware.md) | Pin, wiring, perintah Serial, pengaman firmware, urutan tes, pemeliharaan |
 | [docs/bom-and-power.md](docs/bom-and-power.md) | Daftar komponen dan anggaran daya |
 | [docs/safety.md](docs/safety.md) | Catatan keselamatan listrik, air, bagian bergerak |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Gejala, penyebab, dan tindakan |
 | [docs/user-guide.md](docs/user-guide.md) | Cara memakai dashboard |
-| [docs/api.md](docs/api.md) | Referensi API dan protokol ESP32 |
+| [docs/api.md](docs/api.md) | Referensi API, protokol ESP32, dan topik MQTT |
 | [docs/panduan-wiring/index.html](docs/panduan-wiring/index.html) | Panduan wiring interaktif (buka di browser) |
 | [docs/literature-review.md](docs/literature-review.md) | Studi literatur (13 paper) |
 | [docs/dashboard-layout.md](docs/dashboard-layout.md) | Referensi pengembang: layout dashboard, model 3D, styling |
@@ -38,8 +38,8 @@ Mulai cepat: [Panduan Setup](#panduan-setup) di bawah → rangkai alat dengan [h
 | `web/` | Backend API dan dashboard web (Next.js 16) |
 | `database/schema.sql` | Skema PostgreSQL (tabel + node pertama) |
 | `database/presets.sql` | Tabel preset tanaman + 7 preset bawaan beserta sumbernya (jalankan setelah `schema.sql`) |
-| `database/notifications.sql` | Setting dan log notifikasi WhatsApp |
-| `tools/simulate-esp32.mjs` | Simulator ESP32, untuk tes tanpa hardware |
+| `database/notifications.sql` | Setting dan log notifikasi Telegram |
+| `tools/simulate-esp32.mjs` | Simulator ESP32 (HTTP + MQTT opsional), untuk tes tanpa hardware |
 | `docs/` | Dokumentasi, gambar wiring, dan gambar laporan |
 
 ## Cara kerja
@@ -55,18 +55,11 @@ Mulai cepat: [Panduan Setup](#panduan-setup) di bawah → rangkai alat dengan [h
    - log aktuator
    - titik info di model 3D: ditekan memunculkan kartu berisi nilai sekarang + grafik (riwayat sensor 1 jam–30 hari dengan min/rata/maks hari ini, atau grafik harian pompa/ventilasi). Kartu *Tutup* berisi tombol Tutup/Buka dan kartu *Pompa* tombol Siram; keduanya abu-abu dan terkunci di mode Otomatis/Maintenance
    - tombol mode mengambang di bawah model: Otomatis / Manual / Maintenance
-<<<<<<< HEAD
-   - kartu status sistem (penjelasan di tooltip ⓘ di samping kartu) dan kartu di kiri: tanah, suhu, RH (nilai + grafik 24 jam) dan pompa (penyiraman 7 hari)
-   - baris aktuator di kanan bisa dibuka (pompa, tutup, WiFi): angka analitik
-   - popup tanaman: tab *Tanaman* (preset bergambar, ambang siram/suhu/RH) dan tab *Kalibrasi alat* (ADC tanah, pompa, sudut servo, interval kirim)
-
-5. **Telegram** (opsional, lewat bot Telegram): server mengabarkan kejadian yang perlu tindakan, yaitu tangki air kemungkinan kosong, pompa dihentikan pengaman, sensor tidak terbaca, ESP32 restart karena brownout, dan node offline / online lagi. Server hanya mengabarkan; keputusan tetap di ESP32.
-=======
    - kartu status sistem (penjelasan di tooltip ⓘ di samping kartu) dan kartu di kiri: tanah, suhu, RH (nilai + grafik 24 jam)
    - bar perangkat di bawah (sensor tanah, DHT22, pompa, servo tutup, tangki, WiFi): tiap perangkat bisa dibuka untuk melihat nilai, analitik, dan kalibrasinya
    - popup tanaman: preset bergambar dengan ambang siram/suhu/RH
-5. **WhatsApp** (opsional, lewat Fonnte): server mengabarkan kejadian yang perlu tindakan, yaitu tangki air kemungkinan kosong, pompa dihentikan pengaman, sensor tidak terbaca, ESP32 restart karena brownout, dan node offline / online lagi. Server hanya mengabarkan; keputusan tetap di ESP32.
->>>>>>> e1af325c1a67d62689430674d082d2c6ae9e91c0
+5. **Telegram** (opsional, lewat bot Telegram): server mengabarkan kejadian yang perlu tindakan, yaitu tangki air kemungkinan kosong, pompa dihentikan pengaman, sensor tidak terbaca, ESP32 restart karena brownout, node offline / online lagi, dan tiap aksi otomatis. Server hanya mengabarkan; keputusan tetap di ESP32.
+6. **MQTT** (opsional): ESP32 juga mengirim state ke broker MQTT dan menerima perintah serta setting dari sana. Dashboard berlangganan lewat WebSocket, jadi nilai sensor, gerakan tutup, dan pompa tampil seketika (*Live · MQTT*), dan tombol Buka/Tutup/Siram sampai ke ESP32 dalam ±1 detik. HTTP tetap menyimpan semua data; tanpa MQTT semuanya tetap jalan lewat polling 3 detik.
 
 > Alur utama prototipe adalah **satu arah**: sensor → ESP32 → cloud → web. Kontrol dari web (mode manual) hanya fitur tambahan. Kalau tidak dipakai saat demo, biarkan mode tetap *otomatis*.
 
@@ -76,9 +69,9 @@ Mulai cepat: [Panduan Setup](#panduan-setup) di bawah → rangkai alat dengan [h
 |---|---|
 | Ukur kondisi (sensor) | `readSoil()`, `readDht()`, dihaluskan dengan EMA |
 | Putuskan aksi otomatis (ESP32) | `autoControl()`: siram per dosis + waktu meresap; ventilasi dengan hysteresis 32/29 °C |
-| Kirim data → simpan → tampilkan | `/api/ingest` → tabel `readings` & `actuator_events` → dashboard |
+| Kirim data → simpan → tampilkan | `/api/ingest` → tabel `readings` & `actuator_events` → dashboard (plus state live lewat MQTT) |
 | Pengguna: "Perlu bertindak?" | Banner status: normal / cek tangki air / sensor tidak terbaca / node offline, plus pesan Telegram untuk kejadian yang sama |
-| Pilih mode manual → kirim perintah → ESP32 jalankan | Bar kontrol (Otomatis/Manual/Maintenance) + tombol siram/buka/tutup → tabel `commands` → ESP32 mengambilnya saat sync |
+| Pilih mode manual → kirim perintah → ESP32 jalankan | Bar kontrol (Otomatis/Manual/Maintenance) + tombol siram/buka/tutup → tabel `commands` → ESP32 menerimanya seketika lewat MQTT, atau saat sync HTTP sebagai cadangan |
 | Status terbaru tampil | Reading baru dikirim segera setelah ada perubahan state |
 
 ### Kebutuhan dosen
@@ -87,18 +80,14 @@ Mulai cepat: [Panduan Setup](#panduan-setup) di bawah → rangkai alat dengan [h
 |---|---|---|
 | 2 | Bisa dikembangkan ke banyak node | Setiap data membawa `device_id`. Node baru ditambah lewat halaman awal → *Tambah node* (key dibuat otomatis); firmware cukup diganti `DEVICE_ID`/`DEVICE_KEY`, tanpa ubah kode |
 | 3 | Cloud & web milik sendiri | API Next.js + PostgreSQL buatan tim |
-<<<<<<< HEAD
-| – | Protokol MQTT + dashboard real-time | ESP32 publish state ke broker (`<prefix>/<id>/state`, status online/offline lewat LWT) dan subscribe perintah/setting; dashboard berlangganan lewat WebSocket. Lihat bagian *MQTT* di bawah |
-| 4 | Semua data tersimpan + modul analitik | Tabel `readings`, `actuator_events`, `commands`. Kartu hotspot model 3D (grafik riwayat, min/rata/maks harian, grafik harian pompa & ventilasi) dan baris aktuator yang dibuka: frekuensi & durasi pompa, estimasi air, ventilasi dibuka, % waktu ventilasi terbuka, safety stop |
-=======
 | 4 | Semua data tersimpan + modul analitik | Tabel `readings`, `actuator_events`, `commands`. Kartu hotspot model 3D (grafik riwayat, min/rata/maks harian, grafik harian pompa & ventilasi) dan popup perangkat di bar bawah: frekuensi & durasi pompa, estimasi air, ventilasi dibuka, % waktu ventilasi terbuka, safety stop |
->>>>>>> e1af325c1a67d62689430674d082d2c6ae9e91c0
+| – | Protokol MQTT + dashboard real-time | ESP32 publish state ke broker (`<prefix>/<id>/state`, status online/offline lewat LWT) dan subscribe perintah/setting; dashboard berlangganan lewat WebSocket. Lihat [MQTT](#4-mqtt-opsional-dashboard-real-time) |
 
 ## Panduan Setup
 
 > Bagian ini sama dengan [docs/setup.md](docs/setup.md). Kalau mengubah salah satunya, ubah juga yang lain.
 
-Urutan pemasangan: database → web → (opsional) WhatsApp → firmware. Untuk wiring lihat [docs/hardware.md](docs/hardware.md), untuk daftar komponen [docs/bom-and-power.md](docs/bom-and-power.md), dan baca [docs/safety.md](docs/safety.md) sebelum merangkai. Referensi endpoint ada di [docs/api.md](docs/api.md). Kalau ada yang tidak jalan, lihat [docs/troubleshooting.md](docs/troubleshooting.md).
+Urutan pemasangan: database → web → (opsional) Telegram dan MQTT → firmware. Untuk wiring lihat [docs/hardware.md](docs/hardware.md), untuk daftar komponen [docs/bom-and-power.md](docs/bom-and-power.md), dan baca [docs/safety.md](docs/safety.md) sebelum merangkai. Referensi endpoint ada di [docs/api.md](docs/api.md). Kalau ada yang tidak jalan, lihat [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ### Prasyarat
 
@@ -109,7 +98,8 @@ Urutan pemasangan: database → web → (opsional) WhatsApp → firmware. Untuk 
 | `psql` | Dipakai `npm run db:init` dan perintah manual di bawah |
 | Arduino IDE | Untuk upload firmware (tidak ada build lewat CLI di repo ini) |
 | Akun Vercel | Opsional, untuk deploy web |
-| Akun Fonnte + nomor WA khusus | Opsional, untuk notifikasi WhatsApp |
+| Bot Telegram | Opsional, untuk notifikasi (dibuat gratis lewat @BotFather) |
+| Broker MQTT | Opsional, untuk dashboard real-time (EMQX Cloud Serverless, gratis) |
 
 ### 1. Database
 
@@ -163,14 +153,19 @@ Perintah lain (dari folder `web/`):
 | `DATABASE_URL` | Ya | Connection string Postgres |
 | `DASHBOARD_USER`, `DASHBOARD_PASSWORD` | Sangat disarankan | Basic auth untuk dashboard dan API dashboard. **Kalau kosong, siapa pun yang tahu URL bisa melihat dan mengontrol node.** `/api/ingest`, `/api/health` dan `/api/cron` dikecualikan dari login |
 | `APP_TZ` | Tidak | Zona waktu analitik harian (bawaan `Asia/Jakarta`) |
-| `FONNTE_TOKEN` | Untuk WA | Token device Fonnte (nomor pengirim) |
-| `WA_TARGET` | Tidak | Nomor tujuan bawaan, pisah koma |
+| `TELEGRAM_BOT_TOKEN` | Untuk Telegram | Token bot dari @BotFather (pengirim) |
+| `TELEGRAM_CHAT_ID` | Tidak | Chat ID tujuan bawaan, pisah koma |
 | `CRON_SECRET` | Untuk peringatan offline | String acak, mis. `openssl rand -hex 16` |
-| `WA_OFFLINE_MIN` | Tidak | Menit tanpa data sebelum dikabarkan offline (bawaan 5) |
-| `APP_URL` | Tidak | Tautan dashboard di pesan WA (di Vercel otomatis dari domain production) |
-| `WA_DRY_RUN` | Tidak | `1` = pesan hanya ditulis ke log server, tidak dikirim |
+| `NOTIFY_OFFLINE_MIN` | Tidak | Menit tanpa data sebelum dikabarkan offline (bawaan 5) |
+| `APP_URL` | Tidak | Tautan dashboard di pesan Telegram (di Vercel otomatis dari domain production) |
+| `NOTIFY_DRY_RUN` | Tidak | `1` = pesan hanya ditulis ke log server, tidak dikirim |
+| `MQTT_URL` | Untuk MQTT | `mqtts://<host>:8883`, dipakai server untuk publish perintah dan setting |
+| `MQTT_SERVER_USER`, `MQTT_SERVER_PASS` | Untuk MQTT | Akun broker untuk server |
+| `MQTT_WS_URL` | Untuk MQTT | `wss://<host>:8084/mqtt`, dipakai browser untuk subscribe state |
+| `MQTT_VIEW_USER`, `MQTT_VIEW_PASS` | Untuk MQTT | Akun broker untuk dashboard; cukup izin subscribe, karena terlihat di browser |
+| `MQTT_TOPIC_PREFIX` | Tidak | Awal topik (bawaan `greenhouse`), harus sama dengan firmware |
 
-Jangan commit `.env.local` atau `config.h`. Untuk mengganti rahasia (password DB, token Fonnte, `CRON_SECRET`, key node), ubah di sumbernya lalu perbarui env di Vercel dan `config.h` di firmware.
+Jangan commit `.env.local` atau `config.h`. Untuk mengganti rahasia (password DB, token bot, `CRON_SECRET`, password MQTT, key node), ubah di sumbernya lalu perbarui env di Vercel dan `config.h` di firmware.
 
 #### Deploy ke Vercel
 
@@ -178,10 +173,9 @@ Jangan commit `.env.local` atau `config.h`. Untuk mengganti rahasia (password DB
 2. Isi environment variables di atas (minimal `DATABASE_URL`, `DASHBOARD_USER`, `DASHBOARD_PASSWORD`).
 3. Deploy. URL hasil deploy menjadi `SERVER_URL` di firmware.
 
-<<<<<<< HEAD
-**Notifikasi Telegram (opsional):**
-=======
 `web/scripts/vercel-setup.sh` mendorong variabel dari `.env.local` ke Vercel lalu deploy ke production. Region fungsi diatur ke `sin1` (Singapura) di `web/vercel.json`.
+
+Deploy otomatis dari GitHub diblokir Vercel kalau pembuat commit bukan anggota tim project. Deploy manual dari **root repo** dengan akun yang punya akses: `npx vercel --prod`. `.vercelignore` di root memastikan hanya folder `web/` yang diunggah, tanpa `.env.local` maupun `config.h`.
 
 Nama file di Vercel (Linux) peka huruf besar/kecil. Import `./Charts` tidak sama dengan `./charts`.
 
@@ -189,11 +183,10 @@ Nama file di Vercel (Linux) peka huruf besar/kecil. Import `./Charts` tidak sama
 
 Dari halaman awal dashboard: **Tambah node**, isi id (huruf kecil, angka, `-`, 2–32 karakter) dan nama. API key dibuat otomatis dan **hanya ditampilkan sekali**, jadi salin langsung ke `DEVICE_KEY` di firmware node tersebut. Firmware untuk semua node sama; hanya `DEVICE_ID` dan `DEVICE_KEY` yang berbeda.
 
-### 3. Notifikasi WhatsApp (opsional, Fonnte)
->>>>>>> e1af325c1a67d62689430674d082d2c6ae9e91c0
+### 3. Notifikasi Telegram (opsional)
 
 1. Buat bot lewat [@BotFather](https://t.me/BotFather) (`/newbot`), lalu salin tokennya.
-2. Isi env `TELEGRAM_BOT_TOKEN` (di `.env.local` dan di Vercel; jangan di-commit). Jalankan `database/notifications.sql` jika belum.
+2. Isi env `TELEGRAM_BOT_TOKEN` (di `.env.local` dan Vercel; jangan di-commit). Jalankan `database/notifications.sql` jika belum.
 3. Kirim `/start` ke bot dari akun Telegram penerima (atau tambahkan bot ke grup dan kirim satu pesan di sana).
 4. Atur per node lewat tombol 🔔 di navigasi dashboard node: tekan *Cari chat ID* untuk memilih chat yang baru mengirim pesan ke bot, pilih jenis pesan yang dikirim, lalu *Kirim pesan uji*. Chat ID yang dikosongkan memakai env `TELEGRAM_CHAT_ID` (opsional, tujuan bawaan untuk semua node, pisah koma). Token bot tetap satu untuk seluruh web.
 5. Untuk peringatan *node offline*, isi `CRON_SECRET` (string acak) lalu buat job di [cron-job.org](https://cron-job.org) tiap 5 menit:
@@ -208,48 +201,29 @@ Semua jenis aktif secara bawaan; tiap jenis bisa dimatikan per node.
 | Pompa dihentikan pengaman | event `system safety` | 15 menit |
 | Sensor tidak terbaca | 2 reading berturut-turut tanpa nilai | 60 menit |
 | Restart karena brownout | event `system boot` | 30 menit |
-<<<<<<< HEAD
-| Node offline / online lagi | `/api/cron/offline` (setelah `NOTIFY_OFFLINE_MIN`, default 5 menit) / reading pertama setelahnya | sekali per kejadian |
+| Node offline / online lagi | `/api/cron/offline` (setelah `NOTIFY_OFFLINE_MIN`, bawaan 5 menit) / reading pertama setelahnya | sekali per kejadian |
 | Siram otomatis / Ventilasi otomatis (beserta alasannya, mis. suhu ≥ batas) | event pompa / tutup dengan trigger `auto` | tiap aksi; aksi dalam satu sync digabung jadi satu pesan |
+
+Pengaturan dari sisi pengguna: [docs/user-guide.md](docs/user-guide.md#notifikasi-telegram). Kalau pesan tidak terkirim: [docs/troubleshooting.md](docs/troubleshooting.md#telegram).
 
 Semua pesan (berhasil atau gagal) tercatat di tabel `notifications`. Untuk uji tanpa mengirim, isi `NOTIFY_DRY_RUN=1`: pesan hanya ditulis ke log server.
 
-**MQTT (opsional, untuk dashboard real-time):**
+### 4. MQTT (opsional, dashboard real-time)
 
-HTTP tetap jalan seperti biasa (penyimpanan data, analitik, notifikasi). MQTT menambahkan jalur langsung:
+HTTP tetap jalan seperti biasa (penyimpanan data, analitik, notifikasi). MQTT menambahkan jalur langsung; topik dan isi pesannya ada di [docs/api.md](docs/api.md#mqtt). Broker yang disarankan: **EMQX Cloud Serverless** (gratis permanen: 1 juta session minutes + 1 GB trafik per bulan, TLS + WebSocket). HiveMQ Cloud sekarang hanya uji coba 15 hari lalu berbayar. Broker lain juga bisa selama mendukung MQTT over TLS dan WebSocket (wss).
 
-| Topik | Arah | Isi |
-|---|---|---|
-| `<prefix>/<id>/state` | ESP32 → broker → dashboard | reading + state aktuator (JSON, retained). Perubahan aktuator dikirim seketika (termasuk saat pompa menyala dan servo bergerak), perubahan sensor paling cepat tiap 2 s, heartbeat tiap 10 s; cukup hemat untuk kuota broker gratis |
-| `<prefix>/<id>/status` | ESP32 → broker | `online` / `offline` (LWT: broker menulis `offline` sendiri kalau ESP32 hilang) |
-| `<prefix>/<id>/cmd` | server → ESP32 | perintah `{id, type, payload}` begitu tombol ditekan; ESP32 melewati id yang sudah dijalankan, karena HTTP sync tetap mengantarkannya sebagai cadangan |
-| `<prefix>/<id>/settings` | server → ESP32 | setting lengkap (retained) begitu disimpan |
-
-`<prefix>` bawaan `greenhouse`. Aturan mode tetap sama: server menolak perintah di mode otomatis, dan firmware juga memeriksanya sendiri.
-
-Broker yang disarankan: **EMQX Cloud Serverless** (gratis permanen: 1 juta session minutes + 1 GB trafik per bulan, TLS + WebSocket). HiveMQ Cloud sekarang hanya uji coba 15 hari lalu berbayar. Broker lain juga bisa selama mendukung MQTT over TLS dan WebSocket (wss).
-
-1. Daftar di [EMQX Cloud](https://cloud.emqx.com) → *New Deployment* → **Serverless**. Catat *Address* (host) dari halaman *Overview*: port TLS **8883**, WebSocket TLS **8084**.
-2. Di *Access Control → Authentication*, buat 3 akun:
+1. Daftar di [EMQX Cloud](https://cloud.emqx.com) → *EMQX Broker* → *New* → **Serverless**. Biarkan *Spend Limit* = 0, supaya broker hanya berhenti saat kuota gratis habis, tanpa tagihan. Catat *Address* (host) dari halaman *Overview*: port TLS **8883**, WebSocket TLS **8084**.
+2. Di *Access Control → Authentication*, buat 3 akun dengan password acak yang panjang:
    - **device** → `MQTT_USER`/`MQTT_PASS` di `config.h` firmware
    - **server** → `MQTT_SERVER_USER`/`MQTT_SERVER_PASS`
-   - **dashboard** → `MQTT_VIEW_USER`/`MQTT_VIEW_PASS` (kredensial ini terlihat di browser; batasi lewat *Authorization* supaya hanya boleh subscribe `greenhouse/#`)
-3. Isi env web (di `.env.local` dan Vercel): `MQTT_URL=mqtts://<host>:8883`, `MQTT_WS_URL=wss://<host>:8084/mqtt`, plus akun di atas.
-4. Isi `MQTT_HOST` (+ akun device) di `config.h`, lalu upload ulang firmware.
+   - **dashboard** → `MQTT_VIEW_USER`/`MQTT_VIEW_PASS`
+3. Di *Access Control → Authorization*, batasi akun dashboard: *Allow · Subscribe* `greenhouse/#` dan *Deny · Publish* `#`. Kredensial dashboard terlihat di browser, jadi tanpa aturan ini siapa pun yang membuka dashboard bisa mengirim perintah langsung ke ESP32.
+4. Isi env web (di `.env.local` dan Vercel): `MQTT_URL=mqtts://<host>:8883`, `MQTT_WS_URL=wss://<host>:8084/mqtt`, plus akun di atas.
+5. Isi `MQTT_HOST` (+ akun device) di `config.h`, lalu upload ulang firmware.
 
-Kalau semua tersambung, pil di navigasi dashboard berubah jadi **Live · MQTT**. Tanpa env MQTT, dashboard kembali ke polling tiap 3 detik.
-=======
-| Node offline / online lagi | `/api/cron/offline` (setelah `WA_OFFLINE_MIN`, bawaan 5 menit) / reading pertama setelahnya | sekali per kejadian |
-| Siram otomatis / Ventilasi otomatis (beserta alasannya, mis. suhu ≥ batas) | event pompa / tutup dengan trigger `auto` | tiap aksi; aksi dalam satu sync digabung jadi satu pesan |
+Kalau semua tersambung, penanda di navigasi dashboard berubah jadi **Live · MQTT**. Tanpa env MQTT, dashboard kembali ke polling tiap 3 detik. Kirim state sudah dibuat hemat supaya muat di kuota gratis: perubahan aktuator seketika, perubahan sensor paling cepat tiap 2 detik, heartbeat tiap 10 detik.
 
-Pengaturan dari sisi pengguna: [docs/user-guide.md](docs/user-guide.md#notifikasi-whatsapp). Kalau pesan tidak terkirim: [docs/troubleshooting.md](docs/troubleshooting.md#whatsapp).
-
-Semua pesan (berhasil atau gagal) tercatat di tabel `notifications`. Untuk uji tanpa mengirim, isi `WA_DRY_RUN=1`: pesan hanya ditulis ke log server.
->>>>>>> e1af325c1a67d62689430674d082d2c6ae9e91c0
-
-Fonnte adalah gerbang WhatsApp tidak resmi. Nomor pengirim bisa diblokir WhatsApp, jadi jangan gunakan nomor pribadi dan siapkan jalur cadangan (mis. telepon atau pesan langsung ke penanggung jawab).
-
-### 4. Uji tanpa hardware (simulator)
+### 5. Uji tanpa hardware (simulator)
 
 ```bash
 node tools/simulate-esp32.mjs --url http://localhost:3000 --id gh-01 --key <api_key>
@@ -258,7 +232,7 @@ node tools/simulate-esp32.mjs --url http://localhost:3000 --id gh-01 --key <api_
   --mqtt-url mqtts://<host>:8883 --mqtt-user <akun device> --mqtt-pass <password>
 ```
 
-Simulator meniru protokol sync ESP32 (reading, event, perintah, aturan mode; lihat [docs/api.md](docs/api.md#post-apiingest-protokol-esp32)). Datanya buatan. Setelah selesai uji, hapus supaya grafik dan analitik tidak tercampur:
+Simulator meniru protokol sync ESP32 (reading, event, perintah, aturan mode, dan MQTT; lihat [docs/api.md](docs/api.md#post-apiingest-protokol-esp32)). Datanya buatan. Setelah selesai uji, hapus supaya grafik dan analitik tidak tercampur:
 
 ```sql
 delete from readings;
@@ -266,22 +240,18 @@ delete from actuator_events;
 delete from commands;
 ```
 
-### 5. Firmware ESP32
+### 6. Firmware ESP32
 
 1. Install board **esp32 by Espressif** lewat Board Manager.
 2. Install library lewat Library Manager:
    - **DHT sensor library** (Adafruit) + **Adafruit Unified Sensor**
    - **ESP32Servo**
    - **ArduinoJson** (v7)
-<<<<<<< HEAD
    - **PubSubClient** (Nick O'Leary), untuk MQTT
-3. Salin `config.example.h` menjadi `config.h`, lalu isi WiFi, `SERVER_URL`, `DEVICE_ID`, dan `DEVICE_KEY`. Kosongkan `WIFI_SSID` untuk tes offline di breadboard. Untuk MQTT, isi juga `MQTT_HOST`, `MQTT_USER`, `MQTT_PASS` (kosongkan `MQTT_HOST` = MQTT nonaktif).
-=======
-3. Salin `firmware/smart_greenhouse/config.example.h` menjadi `config.h`, lalu isi WiFi, `SERVER_URL`, `DEVICE_ID`, dan `DEVICE_KEY`. `DEVICE_KEY` harus sama dengan `api_key` di tabel `devices`. Kosongkan `WIFI_SSID` untuk tes offline di breadboard.
->>>>>>> e1af325c1a67d62689430674d082d2c6ae9e91c0
+3. Salin `firmware/smart_greenhouse/config.example.h` menjadi `config.h`, lalu isi WiFi, `SERVER_URL`, `DEVICE_ID`, dan `DEVICE_KEY`. `DEVICE_KEY` harus sama dengan `api_key` di tabel `devices`. Kosongkan `WIFI_SSID` untuk tes offline di breadboard. Untuk MQTT, isi juga `MQTT_HOST`, `MQTT_USER`, `MQTT_PASS` (kosongkan `MQTT_HOST` = MQTT nonaktif).
 4. Pilih board **ESP32 Dev Module**.
 5. Lepas daya 5 V dari adaptor sebelum upload lewat USB (lihat [docs/safety.md](docs/safety.md)).
-6. Buka Serial Monitor (115200, Newline) dan cek baris boot: alasan reset terakhir dan status WiFi.
+6. Buka Serial Monitor (115200, Newline) dan cek baris boot: alasan reset terakhir dan status WiFi. Perintah `status` juga menampilkan status MQTT.
 
 WiFi harus 2,4 GHz (ESP32 tidak mendukung 5 GHz). `SERVER_URL` ditulis tanpa garis miring di akhir.
 
@@ -293,7 +263,8 @@ Catat versi board package dan library yang dipakai saat firmware terakhir terbuk
 | DHT sensor library | _isi_ |
 | Adafruit Unified Sensor | _isi_ |
 | ESP32Servo | _isi_ |
-| ArduinoJson | _isi (harus v7)_ |
+| ArduinoJson | 7.4.3 |
+| PubSubClient | _isi_ |
 
 ### Selanjutnya
 
@@ -301,44 +272,4 @@ Rangkai alat dan jalankan urutan tes di [docs/hardware.md](docs/hardware.md#urut
 
 ## Keselamatan
 
-<<<<<<< HEAD
-- **Pompa saat boot:** relay diset OFF sebelum pin dijadikan output. Kalau pompa tetap menyala saat boot, ubah `RELAY_ACTIVE_LOW`.
-- **Batas waktu pompa:** tiap kali menyala dibatasi timer hardware, dan maksimal mutlak 10 s walaupun loop tertahan.
-- **Stop rule:** jumlah dosis otomatis per jam dibatasi. Jika batas tercapai tapi tanah masih kering, muncul peringatan *Cek tangki air*.
-- **Sensor tidak valid:** jika sensor tanah di luar rentang atau DHT22 gagal 3× berturut-turut, pompa otomatis berhenti dan tidak ada dosis baru.
-- **Servo:** bergerak bertahap (tetap 1°/15 ms, konstanta `SERVO_STEP_MS` di firmware) supaya tutup tidak terbanting, dan sudutnya dibatasi maksimal 90° dari posisi tertutup. Setelah sampai, servo sengaja **tidak** di-*detach*: sinyal PWM tetap menahan posisi, karena sebagian MG996R meluncur sendiri ke ujung saat sinyal dilepas dan tutup bisa melorot karena beratnya. Posisi terakhir disimpan di NVS, jadi setelah restart (mis. brownout) servo tidak melompat.
-- **HTTP:** tidak dijalankan saat pompa atau servo sedang bergerak.
-- **MQTT:** sambung ulang ke broker (TLS, bisa memblokir 1–3 s) juga tidak dijalankan saat pompa atau servo bergerak, dan dicoba paling cepat tiap 10 s. Broker mati tidak mengganggu otomasi maupun HTTP.
-
-## 4. Urutan tes (sesuai handoff)
-
-1. Rangkai breadboard sesuai tabel pin. Tes tiap komponen lewat Serial: `status`, `pump 1000`, `lid 100`.
-2. Kalibrasi sensor tanah dengan `cal` (di udara dan di air), lalu isi nilainya di dashboard.
-3. Ukur debit pompa: `pump 10000` ke gelas ukur, bagi 10, lalu isi *Debit pompa* (ml/s) lewat kartu *Tanaman* → tab *Kalibrasi alat*.
-4. Jalankan servo dan pompa bersamaan, pastikan ESP32 tidak reset.
-5. Tes end-to-end: reading → API → database → dashboard, lalu mode manual → tombol → pompa/tutup.
-6. Di dalam kotak: atur sudut *Tertutup* / *Terbuka* lewat kartu *Tanaman* → tab *Kalibrasi alat* (±1°/±5°).
-
-## API
-
-| Method | Endpoint | Fungsi |
-|---|---|---|
-| POST | `/api/ingest` | Dari ESP32 (header `x-device-key`) |
-| GET / PUT | `/api/devices/:id/notify` | Setting notifikasi Telegram node (chat ID + jenis pesan) |
-| POST | `/api/devices/:id/notify/test` | Kirim pesan Telegram uji |
-| GET | `/api/notify/chats` | Chat yang baru mengirim pesan ke bot (untuk memilih chat ID) |
-| GET | `/api/mqtt/config` | Alamat WebSocket + akun subscribe MQTT untuk dashboard (`enabled: false` kalau MQTT tidak diatur) |
-| GET | `/api/cron/offline` | Cek node offline → Telegram (header `Authorization: Bearer <CRON_SECRET>`) |
-| GET / POST | `/api/devices` | Daftar node / tambah node |
-| GET | `/api/devices/:id/state` | Status terkini + setting |
-| PUT | `/api/devices/:id/settings` | Ubah threshold/kalibrasi/mode |
-| POST | `/api/devices/:id/commands` | `pump_dose` / `lid` (mode manual) |
-| GET | `/api/devices/:id/readings?range=1h\|6h\|24h\|3d\|7d\|30d` | Riwayat (di-downsample) |
-| GET | `/api/devices/:id/events` | Log aktuator |
-| GET | `/api/devices/:id/analytics?days=7` | Statistik harian |
-| POST | `/api/devices/:id/preset` | Terapkan preset tanaman `{preset_id}` ke node |
-| GET / POST | `/api/presets` | Daftar preset / buat preset custom |
-| PUT / DELETE | `/api/presets/:pid` | Ubah / hapus preset custom (bawaan hanya-baca) |
-=======
-Pompa dibatasi 10 detik per nyala, dosis per jam dibatasi, dan penyiraman berhenti bila sensor tidak valid; semuanya di firmware, jadi tetap berlaku saat offline. Rangkaian bertegangan rendah (5 V), tetapi air, adaptor, dan servo tetap perlu hati-hati. Baca [docs/safety.md](docs/safety.md) sebelum merangkai, dan **ganti `api_key` bawaan serta isi `DASHBOARD_USER`/`DASHBOARD_PASSWORD`** sebelum alat tersambung ke internet.
->>>>>>> e1af325c1a67d62689430674d082d2c6ae9e91c0
+Pompa dibatasi 10 detik per nyala, dosis per jam dibatasi, dan penyiraman berhenti bila sensor tidak valid; semuanya di firmware, jadi tetap berlaku saat offline. Rangkaian bertegangan rendah (5 V), tetapi air, adaptor, dan servo tetap perlu hati-hati. Baca [docs/safety.md](docs/safety.md) sebelum merangkai, dan **ganti `api_key` bawaan, isi `DASHBOARD_USER`/`DASHBOARD_PASSWORD`, dan pakai password MQTT yang acak** sebelum alat tersambung ke internet.

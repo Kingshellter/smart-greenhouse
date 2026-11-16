@@ -55,17 +55,27 @@ Cek berurutan:
 | Web error `prepared statement ... does not exist` | `prepare: false` tidak aktif untuk pooler | Konfigurasi sudah diset di `web/lib/db.ts`; jangan menghapusnya |
 | Kolom tidak ada setelah update | Skema lama | Jalankan ulang ketiga file SQL (aman diulang) |
 
-## WhatsApp
+## Telegram
 
 | Gejala | Tindakan |
 |---|---|
-| Tidak ada pesan sama sekali | Cek `FONNTE_TOKEN` terisi dan device Fonnte tersambung; tabel `notifications` mencatat tiap percobaan (status `sent`/`skipped`/`failed`) |
-| Status `skipped` | Jenis pesan dimatikan untuk node itu di popup 🔔, atau belum ada nomor tujuan (isi nomor di popup atau `WA_TARGET`) |
-| Pesan tidak muncul walau kejadian terjadi lagi | Jeda minimum per jenis pesan (15–60 menit, lihat [setup.md](setup.md#3-notifikasi-whatsapp-opsional-fonnte)) |
-| Hanya uji coba tanpa kirim | `WA_DRY_RUN=1` hanya menulis ke log server |
+| Tidak ada pesan sama sekali | Cek `TELEGRAM_BOT_TOKEN` terisi (popup 🔔 memberi tahu kalau token kosong atau ditolak); tabel `notifications` mencatat tiap percobaan beserta pesan error dari Telegram |
+| Status `skipped` | Jenis pesan dimatikan untuk node itu di popup 🔔, atau belum ada chat ID tujuan (pilih lewat *Cari chat ID* atau isi `TELEGRAM_CHAT_ID`) |
+| *Cari chat ID* kosong | Penerima belum mengirim `/start` ke bot dalam 24 jam terakhir. Untuk grup, tambahkan bot lalu kirim satu pesan di grup |
+| Error `chat not found` / `bot was blocked by the user` | Chat ID salah, atau penerima memblokir bot; kirim `/start` lagi lalu pilih ulang chat ID |
+| Pesan tidak muncul walau kejadian terjadi lagi | Jeda minimum per jenis pesan (15–60 menit, lihat [setup.md](setup.md#3-notifikasi-telegram-opsional)) |
+| Hanya uji coba tanpa kirim | `NOTIFY_DRY_RUN=1` hanya menulis ke log server |
 | Tidak pernah ada peringatan *node offline* | Cron eksternal belum dibuat: butuh `CRON_SECRET` dan job tiap 5 menit ke `/api/cron/offline` dengan header `Authorization: Bearer ...` |
 | Cron mengembalikan 503 / 401 | 503: `CRON_SECRET` belum diisi. 401: secret di cron tidak cocok |
-| Pengirim berhenti bekerja | Nomor mungkin dibatasi WhatsApp; siapkan nomor cadangan |
+
+## MQTT
+
+| Gejala | Tindakan |
+|---|---|
+| Penanda dashboard tidak pernah *Live · MQTT* | Cek `status` di Serial: baris `mqtt=` harus `terhubung`. Kalau `nonaktif`, `MQTT_HOST` di `config.h` kosong; kalau `putus (state 4/5)`, username/password akun device salah |
+| ESP32 tersambung tapi dashboard tetap polling | Env `MQTT_WS_URL`/`MQTT_VIEW_USER`/`MQTT_VIEW_PASS` belum diisi di Vercel, atau `MQTT_TOPIC_PREFIX` web berbeda dengan firmware |
+| Tombol tetap terasa lambat (±3 s) | Server gagal publish: cek `MQTT_URL` dan akun server di Vercel. Perintah tetap sampai lewat HTTP sync, jadi tidak hilang |
+| Broker berhenti di tengah bulan | Kuota gratis EMQX Serverless (1 GB / 1 juta session minutes) habis dengan *Spend Limit* 0; cek pemakaian di halaman deployment |
 
 ## Kalau masih buntu
 

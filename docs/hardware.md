@@ -39,8 +39,9 @@ Baud 115200, line ending Newline.
 - **Tidak menyiram 30 detik pertama setelah boot** (`BOOT_GRACE_MS`), supaya restart berulang tidak memicu penyiraman berulang.
 - **Stop rule:** jumlah dosis otomatis per jam dibatasi. Jika batas tercapai tapi tanah masih kering, muncul peringatan *Cek tangki air*.
 - **Sensor tidak valid:** jika sensor tanah di luar rentang (ADC < 100 atau > 4000) atau DHT22 gagal 3× berturut-turut, pompa otomatis berhenti dan tidak ada dosis baru.
-- **Servo:** bergerak cepat tapi bertahap (tetap 1°/5 ms, konstanta `SERVO_STEP_MS`) supaya tutup tidak terbanting, dan sudutnya dibatasi maksimal 90° dari posisi tertutup. Setelah sampai, servo sengaja **tidak** di-*detach*: sinyal PWM tetap menahan posisi, karena sebagian MG996R meluncur sendiri ke ujung saat sinyal dilepas dan tutup bisa melorot karena beratnya. Posisi terakhir disimpan di NVS, jadi setelah restart (mis. brownout) servo tidak melompat.
+- **Servo:** bergerak bertahap (tetap 1°/15 ms, konstanta `SERVO_STEP_MS`) supaya tutup tidak terbanting dan arus servo tidak melonjak (5 ms/° terbukti membuat servo macet dan ESP32 restart saat daya dari VIN), dan sudutnya dibatasi maksimal 90° dari posisi tertutup. Setelah sampai, servo sengaja **tidak** di-*detach*: sinyal PWM tetap menahan posisi, karena sebagian MG996R meluncur sendiri ke ujung saat sinyal dilepas dan tutup bisa melorot karena beratnya. Posisi terakhir disimpan di NVS, jadi setelah restart (mis. brownout) servo tidak melompat.
 - **HTTP:** tidak dijalankan saat pompa atau servo sedang bergerak.
+- **MQTT:** sambung ulang ke broker (TLS, bisa memblokir 1–3 s) juga tidak dijalankan saat pompa atau servo bergerak, dan dicoba paling cepat tiap 10 s. Broker mati tidak mengganggu otomasi maupun HTTP.
 - **Kontrol otomatis tetap jalan saat WiFi putus.** Keputusan siram dan ventilasi dibuat di ESP32, bukan di server.
 
 Semua pengaman di atas ada di firmware. Pengaman fisik tambahan (mis. sakelar pelampung atau timer terpisah) belum ada. Batasan dan saran pengaman fisik: [safety.md](safety.md#fail-safe-dan-batasannya).

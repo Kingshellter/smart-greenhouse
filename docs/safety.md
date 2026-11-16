@@ -40,4 +40,5 @@ Batasannya: semuanya perangkat lunak. Kalau relay macet menutup (kontak menempel
 - Ganti `api_key` bawaan `gh-01` sebelum alat tersambung ke internet.
 - Isi `DASHBOARD_USER` dan `DASHBOARD_PASSWORD` (lihat [setup.md](setup.md#variabel-environment)). Tanpa itu, siapa pun yang tahu URL bisa melihat data dan menjalankan pompa dan tutup.
 - Jangan commit `.env.local` atau `firmware/.../config.h`, dan jangan menempelkan token atau key di screenshot.
-- Pakai nomor WhatsApp khusus untuk pengirim Fonnte, bukan nomor pribadi.
+- Token bot Telegram memberi kendali penuh atas bot. Kalau sempat tersebar, buat token baru lewat @BotFather (`/revoke`) lalu ganti di `.env.local` dan Vercel.
+- Akun MQTT memakai password acak, dan akun dashboard dibatasi hanya *subscribe* (Authorization di broker). Siapa pun yang bisa publish ke topik `cmd` bisa menjalankan pompa dan tutup saat mode manual.

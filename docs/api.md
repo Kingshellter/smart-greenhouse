@@ -19,7 +19,7 @@ Terkait: variabel environment dan cara deploy di [setup.md](setup.md#variabel-en
 |---|---|---|
 | POST | `/api/ingest` | Dari ESP32 (header `x-device-key`) |
 | GET | `/api/health` | Cek hidup |
-| GET | `/api/cron/offline` | Cek node offline → WhatsApp |
+| GET | `/api/cron/offline` | Cek node offline → Telegram |
 | GET / POST | `/api/devices` | Daftar node / tambah node |
 | GET | `/api/devices/:id/state` | Status terkini + setting |
 | PUT | `/api/devices/:id/settings` | Ubah threshold, kalibrasi, mode (parsial) |
@@ -28,8 +28,10 @@ Terkait: variabel environment dan cara deploy di [setup.md](setup.md#variabel-en
 | GET | `/api/devices/:id/events` | Log aktuator |
 | GET | `/api/devices/:id/analytics?days=7` | Statistik harian (1–90 hari) |
 | POST | `/api/devices/:id/preset` | Terapkan preset tanaman `{preset_id}` ke node |
-| GET / PUT | `/api/devices/:id/notify` | Setting notifikasi WhatsApp node (nomor + jenis pesan) |
-| POST | `/api/devices/:id/notify/test` | Kirim pesan WA uji |
+| GET / PUT | `/api/devices/:id/notify` | Setting notifikasi Telegram node (chat ID + jenis pesan) |
+| POST | `/api/devices/:id/notify/test` | Kirim pesan Telegram uji |
+| GET | `/api/notify/chats` | Chat yang baru mengirim pesan ke bot (untuk memilih chat ID) |
+| GET | `/api/mqtt/config` | Alamat WebSocket + akun subscribe MQTT untuk dashboard (`enabled: false` kalau MQTT tidak diatur) |
 | GET / POST | `/api/presets` | Daftar preset / buat preset custom |
 | PUT / DELETE | `/api/presets/:pid` | Ubah / hapus preset custom (bawaan hanya-baca) |
 
@@ -98,4 +100,17 @@ Respons 201 memuat `api_key` **sekali saja**. 409 bila id sudah ada.
 
 ## `GET /api/cron/offline`
 
-Menandai node yang tidak mengirim data lebih dari `WA_OFFLINE_MIN` menit, lalu mengirim WhatsApp. Respons: `{ "enabled": true, "checked": n, "alerted": ["gh-01"] }`. 503 bila `CRON_SECRET` belum diisi, 401 bila secret salah.
+Menandai node yang tidak mengirim data lebih dari `NOTIFY_OFFLINE_MIN` menit, lalu mengirim pesan Telegram. Respons: `{ "enabled": true, "checked": n, "alerted": ["gh-01"] }`. 503 bila `CRON_SECRET` belum diisi, 401 bila secret salah.
+
+## MQTT
+
+Opsional, aktif kalau env `MQTT_URL`/`MQTT_WS_URL` dan `MQTT_HOST` di firmware diisi. HTTP tetap jadi penyimpan data; MQTT hanya mempercepat tampilan dan perintah. `<prefix>` bawaan `greenhouse`.
+
+| Topik | Arah | Isi |
+|---|---|---|
+| `<prefix>/<id>/state` | ESP32 → broker → dashboard | Field sama dengan `reading` di `/api/ingest` (JSON, retained), tapi `lid_angle` adalah posisi servo saat itu. Perubahan aktuator dikirim seketika (juga saat pompa menyala dan servo bergerak), perubahan sensor paling cepat tiap 2 s, heartbeat tiap 10 s |
+| `<prefix>/<id>/status` | ESP32 → broker | `online` / `offline` (LWT: broker menulis `offline` sendiri kalau ESP32 hilang), retained |
+| `<prefix>/<id>/cmd` | server → ESP32 | `{id, type, payload}` begitu `POST /commands` diterima. HTTP sync tetap mengantarkannya sebagai cadangan; ESP32 melewati id yang sudah dijalankan |
+| `<prefix>/<id>/settings` | server → ESP32 | Setting lengkap (sama dengan balasan `/api/ingest`), retained, begitu `PUT /settings` atau `POST /preset` disimpan |
+
+Vercel (serverless) tidak bisa terus tersambung ke broker, jadi server hanya *publish* (sambung → kirim → putus). Dashboard berlangganan `state` dan `status` lewat WebSocket memakai akun dari `/api/mqtt/config`; pesan *retained* diabaikan karena umurnya tidak diketahui, dan data dianggap live selama 25 detik sejak pesan terakhir. Aturan mode tetap berlaku: server menolak perintah di mode otomatis, dan firmware juga memeriksanya sendiri.

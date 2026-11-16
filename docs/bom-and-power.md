@@ -46,7 +46,7 @@ Kasus terburuk (semuanya aktif bersamaan, servo stall): jumlahkan kolom puncak, 
 Hal yang perlu dipastikan:
 
 - Firmware tidak menjalankan HTTP saat pompa atau servo bergerak, tetapi pompa dan servo masih bisa bergerak bersamaan. Tes langkah 4 di [hardware.md](hardware.md#urutan-tes) memeriksa ini.
-- Tanda daya kurang: ESP32 restart saat servo/pompa bergerak. Firmware mencatatnya sebagai restart `BROWNOUT`, dan bisa dikabarkan lewat WhatsApp. Langkah penanganan: [troubleshooting.md](troubleshooting.md#hardware).
+- Tanda daya kurang: ESP32 restart saat servo/pompa bergerak. Firmware mencatatnya sebagai restart `BROWNOUT`, dan bisa dikabarkan lewat Telegram. Langkah penanganan: [troubleshooting.md](troubleshooting.md#hardware).
 - Daya USB laptop tidak cukup untuk servo dengan beban. Mode "tanpa adaptor" di panduan wiring hanya untuk tes singkat tanpa beban.
 
 ## Tabel pengukuran (isi saat tes)

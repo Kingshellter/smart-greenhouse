@@ -66,7 +66,7 @@ Format sitasi: IEEE. Cek ulang nomor halaman sebelum dimasukkan ke laporan.
 **[11] Supriyanto, P. O. W. Aryawan, M. Solahudin, L. Sucahyo, S. Widodo, dan S. Susanto** — "Development of tropical grape greenhouse monitoring and nutrient delivery scheduling using MQTT protocol and IoT," *Jurnal Teknotan*, vol. 20, no. 2, 2026, doi: 10.24198/jt.vol20n2.6.
 - **Isi:** Node ESP32 menggunakan broker MQTT di VPS sendiri dan database MySQL. Latensi kontrol 63–86 ms, di bawah batas 150 ms.
 - **Kaitan:** Contoh cloud dan database milik sendiri.
-- **Bahan diskusi:** Perbandingan HTTP (pilihan kami) dengan MQTT.
+- **Bahan diskusi:** Perbandingan HTTP dengan MQTT. Proyek kami memakai keduanya: HTTP untuk menyimpan data, MQTT (broker cloud) untuk tampilan dan perintah real-time.
 
 **[12] O. E. Guijarro-Rubio, D. R. Vinocunga-Pillajo, O. Del Real-Fleites, E. Guardado-Yordi, dan A. Pérez-Martínez** — "Monitoring of environmental variables in greenhouse crops through an IoT wireless sensor network," *DYNA*, vol. 92, no. 235, 2025, doi: 10.15446/dyna.v92n235.115402.
 - **Isi:** Jaringan sensor nirkabel dengan beberapa node client ESP8266 dan satu node server ESP32. Data mengalir lewat MQTT → Node-RED → InfluxDB → Grafana.

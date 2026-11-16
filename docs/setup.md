@@ -2,7 +2,7 @@
 
 > Isi file ini sama dengan bagian *Panduan Setup* di [README.md](../README.md#panduan-setup). Kalau mengubah salah satunya, ubah juga yang lain.
 
-Urutan pemasangan: database → web → (opsional) WhatsApp → firmware. Untuk wiring lihat [hardware.md](hardware.md), untuk daftar komponen [bom-and-power.md](bom-and-power.md), dan baca [safety.md](safety.md) sebelum merangkai. Referensi endpoint ada di [api.md](api.md). Kalau ada yang tidak jalan, lihat [troubleshooting.md](troubleshooting.md).
+Urutan pemasangan: database → web → (opsional) Telegram dan MQTT → firmware. Untuk wiring lihat [hardware.md](hardware.md), untuk daftar komponen [bom-and-power.md](bom-and-power.md), dan baca [safety.md](safety.md) sebelum merangkai. Referensi endpoint ada di [api.md](api.md). Kalau ada yang tidak jalan, lihat [troubleshooting.md](troubleshooting.md).
 
 ## Prasyarat
 
@@ -13,7 +13,8 @@ Urutan pemasangan: database → web → (opsional) WhatsApp → firmware. Untuk 
 | `psql` | Dipakai `npm run db:init` dan perintah manual di bawah |
 | Arduino IDE | Untuk upload firmware (tidak ada build lewat CLI di repo ini) |
 | Akun Vercel | Opsional, untuk deploy web |
-| Akun Fonnte + nomor WA khusus | Opsional, untuk notifikasi WhatsApp |
+| Bot Telegram | Opsional, untuk notifikasi (dibuat gratis lewat @BotFather) |
+| Broker MQTT | Opsional, untuk dashboard real-time (EMQX Cloud Serverless, gratis) |
 
 ## 1. Database
 
@@ -67,14 +68,19 @@ Perintah lain (dari folder `web/`):
 | `DATABASE_URL` | Ya | Connection string Postgres |
 | `DASHBOARD_USER`, `DASHBOARD_PASSWORD` | Sangat disarankan | Basic auth untuk dashboard dan API dashboard. **Kalau kosong, siapa pun yang tahu URL bisa melihat dan mengontrol node.** `/api/ingest`, `/api/health` dan `/api/cron` dikecualikan dari login |
 | `APP_TZ` | Tidak | Zona waktu analitik harian (bawaan `Asia/Jakarta`) |
-| `FONNTE_TOKEN` | Untuk WA | Token device Fonnte (nomor pengirim) |
-| `WA_TARGET` | Tidak | Nomor tujuan bawaan, pisah koma |
+| `TELEGRAM_BOT_TOKEN` | Untuk Telegram | Token bot dari @BotFather (pengirim) |
+| `TELEGRAM_CHAT_ID` | Tidak | Chat ID tujuan bawaan, pisah koma |
 | `CRON_SECRET` | Untuk peringatan offline | String acak, mis. `openssl rand -hex 16` |
-| `WA_OFFLINE_MIN` | Tidak | Menit tanpa data sebelum dikabarkan offline (bawaan 5) |
-| `APP_URL` | Tidak | Tautan dashboard di pesan WA (di Vercel otomatis dari domain production) |
-| `WA_DRY_RUN` | Tidak | `1` = pesan hanya ditulis ke log server, tidak dikirim |
+| `NOTIFY_OFFLINE_MIN` | Tidak | Menit tanpa data sebelum dikabarkan offline (bawaan 5) |
+| `APP_URL` | Tidak | Tautan dashboard di pesan Telegram (di Vercel otomatis dari domain production) |
+| `NOTIFY_DRY_RUN` | Tidak | `1` = pesan hanya ditulis ke log server, tidak dikirim |
+| `MQTT_URL` | Untuk MQTT | `mqtts://<host>:8883`, dipakai server untuk publish perintah dan setting |
+| `MQTT_SERVER_USER`, `MQTT_SERVER_PASS` | Untuk MQTT | Akun broker untuk server |
+| `MQTT_WS_URL` | Untuk MQTT | `wss://<host>:8084/mqtt`, dipakai browser untuk subscribe state |
+| `MQTT_VIEW_USER`, `MQTT_VIEW_PASS` | Untuk MQTT | Akun broker untuk dashboard; cukup izin subscribe, karena terlihat di browser |
+| `MQTT_TOPIC_PREFIX` | Tidak | Awal topik (bawaan `greenhouse`), harus sama dengan firmware |
 
-Jangan commit `.env.local` atau `config.h`. Untuk mengganti rahasia (password DB, token Fonnte, `CRON_SECRET`, key node), ubah di sumbernya lalu perbarui env di Vercel dan `config.h` di firmware.
+Jangan commit `.env.local` atau `config.h`. Untuk mengganti rahasia (password DB, token bot, `CRON_SECRET`, password MQTT, key node), ubah di sumbernya lalu perbarui env di Vercel dan `config.h` di firmware.
 
 ### Deploy ke Vercel
 
@@ -84,18 +90,21 @@ Jangan commit `.env.local` atau `config.h`. Untuk mengganti rahasia (password DB
 
 `web/scripts/vercel-setup.sh` mendorong variabel dari `.env.local` ke Vercel lalu deploy ke production. Region fungsi diatur ke `sin1` (Singapura) di `web/vercel.json`.
 
+Deploy otomatis dari GitHub diblokir Vercel kalau pembuat commit bukan anggota tim project. Deploy manual dari **root repo** dengan akun yang punya akses: `npx vercel --prod`. `.vercelignore` di root memastikan hanya folder `web/` yang diunggah, tanpa `.env.local` maupun `config.h`.
+
 Nama file di Vercel (Linux) peka huruf besar/kecil. Import `./Charts` tidak sama dengan `./charts`.
 
 ### Tambah node baru
 
 Dari halaman awal dashboard: **Tambah node**, isi id (huruf kecil, angka, `-`, 2–32 karakter) dan nama. API key dibuat otomatis dan **hanya ditampilkan sekali**, jadi salin langsung ke `DEVICE_KEY` di firmware node tersebut. Firmware untuk semua node sama; hanya `DEVICE_ID` dan `DEVICE_KEY` yang berbeda.
 
-## 3. Notifikasi WhatsApp (opsional, Fonnte)
+## 3. Notifikasi Telegram (opsional)
 
-1. Daftar di [fonnte.com](https://fonnte.com), tambah device, lalu scan QR dengan nomor WA pengirim (sebaiknya nomor khusus, bukan nomor pribadi).
-2. Isi env `FONNTE_TOKEN` (token device). Jalankan `database/notifications.sql` jika belum.
-3. Atur per node lewat tombol 🔔 di navigasi dashboard node: nomor tujuan (pisah koma) dan jenis pesan yang dikirim, plus tombol *Kirim pesan uji*. Nomor yang dikosongkan memakai env `WA_TARGET` (opsional, nomor bawaan untuk semua node). Token Fonnte (nomor pengirim) tetap satu untuk seluruh web.
-4. Untuk peringatan *node offline*, isi `CRON_SECRET` (string acak) lalu buat job di [cron-job.org](https://cron-job.org) tiap 5 menit:
+1. Buat bot lewat [@BotFather](https://t.me/BotFather) (`/newbot`), lalu salin tokennya.
+2. Isi env `TELEGRAM_BOT_TOKEN` (di `.env.local` dan Vercel; jangan di-commit). Jalankan `database/notifications.sql` jika belum.
+3. Kirim `/start` ke bot dari akun Telegram penerima (atau tambahkan bot ke grup dan kirim satu pesan di sana).
+4. Atur per node lewat tombol 🔔 di navigasi dashboard node: tekan *Cari chat ID* untuk memilih chat yang baru mengirim pesan ke bot, pilih jenis pesan yang dikirim, lalu *Kirim pesan uji*. Chat ID yang dikosongkan memakai env `TELEGRAM_CHAT_ID` (opsional, tujuan bawaan untuk semua node, pisah koma). Token bot tetap satu untuk seluruh web.
+5. Untuk peringatan *node offline*, isi `CRON_SECRET` (string acak) lalu buat job di [cron-job.org](https://cron-job.org) tiap 5 menit:
    `GET https://<domain>/api/cron/offline` dengan header `Authorization: Bearer <CRON_SECRET>`.
    Node yang offline tidak mengirim apa-apa, jadi perlu pemicu dari luar; cron Vercel Hobby hanya sekali sehari.
 
@@ -107,22 +116,38 @@ Semua jenis aktif secara bawaan; tiap jenis bisa dimatikan per node.
 | Pompa dihentikan pengaman | event `system safety` | 15 menit |
 | Sensor tidak terbaca | 2 reading berturut-turut tanpa nilai | 60 menit |
 | Restart karena brownout | event `system boot` | 30 menit |
-| Node offline / online lagi | `/api/cron/offline` (setelah `WA_OFFLINE_MIN`, bawaan 5 menit) / reading pertama setelahnya | sekali per kejadian |
+| Node offline / online lagi | `/api/cron/offline` (setelah `NOTIFY_OFFLINE_MIN`, bawaan 5 menit) / reading pertama setelahnya | sekali per kejadian |
 | Siram otomatis / Ventilasi otomatis (beserta alasannya, mis. suhu ≥ batas) | event pompa / tutup dengan trigger `auto` | tiap aksi; aksi dalam satu sync digabung jadi satu pesan |
 
-Pengaturan dari sisi pengguna: [user-guide.md](user-guide.md#notifikasi-whatsapp). Kalau pesan tidak terkirim: [troubleshooting.md](troubleshooting.md#whatsapp).
+Pengaturan dari sisi pengguna: [user-guide.md](user-guide.md#notifikasi-telegram). Kalau pesan tidak terkirim: [troubleshooting.md](troubleshooting.md#telegram).
 
-Semua pesan (berhasil atau gagal) tercatat di tabel `notifications`. Untuk uji tanpa mengirim, isi `WA_DRY_RUN=1`: pesan hanya ditulis ke log server.
+Semua pesan (berhasil atau gagal) tercatat di tabel `notifications`. Untuk uji tanpa mengirim, isi `NOTIFY_DRY_RUN=1`: pesan hanya ditulis ke log server.
 
-Fonnte adalah gerbang WhatsApp tidak resmi. Nomor pengirim bisa diblokir WhatsApp, jadi jangan gunakan nomor pribadi dan siapkan jalur cadangan (mis. telepon atau pesan langsung ke penanggung jawab).
+## 4. MQTT (opsional, dashboard real-time)
 
-## 4. Uji tanpa hardware (simulator)
+HTTP tetap jalan seperti biasa (penyimpanan data, analitik, notifikasi). MQTT menambahkan jalur langsung; topik dan isi pesannya ada di [api.md](api.md#mqtt). Broker yang disarankan: **EMQX Cloud Serverless** (gratis permanen: 1 juta session minutes + 1 GB trafik per bulan, TLS + WebSocket). HiveMQ Cloud sekarang hanya uji coba 15 hari lalu berbayar. Broker lain juga bisa selama mendukung MQTT over TLS dan WebSocket (wss).
+
+1. Daftar di [EMQX Cloud](https://cloud.emqx.com) → *EMQX Broker* → *New* → **Serverless**. Biarkan *Spend Limit* = 0, supaya broker hanya berhenti saat kuota gratis habis, tanpa tagihan. Catat *Address* (host) dari halaman *Overview*: port TLS **8883**, WebSocket TLS **8084**.
+2. Di *Access Control → Authentication*, buat 3 akun dengan password acak yang panjang:
+   - **device** → `MQTT_USER`/`MQTT_PASS` di `config.h` firmware
+   - **server** → `MQTT_SERVER_USER`/`MQTT_SERVER_PASS`
+   - **dashboard** → `MQTT_VIEW_USER`/`MQTT_VIEW_PASS`
+3. Di *Access Control → Authorization*, batasi akun dashboard: *Allow · Subscribe* `greenhouse/#` dan *Deny · Publish* `#`. Kredensial dashboard terlihat di browser, jadi tanpa aturan ini siapa pun yang membuka dashboard bisa mengirim perintah langsung ke ESP32.
+4. Isi env web (di `.env.local` dan Vercel): `MQTT_URL=mqtts://<host>:8883`, `MQTT_WS_URL=wss://<host>:8084/mqtt`, plus akun di atas.
+5. Isi `MQTT_HOST` (+ akun device) di `config.h`, lalu upload ulang firmware.
+
+Kalau semua tersambung, penanda di navigasi dashboard berubah jadi **Live · MQTT**. Tanpa env MQTT, dashboard kembali ke polling tiap 3 detik. Kirim state sudah dibuat hemat supaya muat di kuota gratis: perubahan aktuator seketika, perubahan sensor paling cepat tiap 2 detik, heartbeat tiap 10 detik.
+
+## 5. Uji tanpa hardware (simulator)
 
 ```bash
 node tools/simulate-esp32.mjs --url http://localhost:3000 --id gh-01 --key <api_key>
+# dengan MQTT:
+node tools/simulate-esp32.mjs --url http://localhost:3000 --id gh-01 --key <api_key> \
+  --mqtt-url mqtts://<host>:8883 --mqtt-user <akun device> --mqtt-pass <password>
 ```
 
-Simulator meniru protokol sync ESP32 (reading, event, perintah, aturan mode; lihat [api.md](api.md#post-apiingest-protokol-esp32)). Datanya buatan. Setelah selesai uji, hapus supaya grafik dan analitik tidak tercampur:
+Simulator meniru protokol sync ESP32 (reading, event, perintah, aturan mode, dan MQTT; lihat [api.md](api.md#post-apiingest-protokol-esp32)). Datanya buatan. Setelah selesai uji, hapus supaya grafik dan analitik tidak tercampur:
 
 ```sql
 delete from readings;
@@ -130,17 +155,18 @@ delete from actuator_events;
 delete from commands;
 ```
 
-## 5. Firmware ESP32
+## 6. Firmware ESP32
 
 1. Install board **esp32 by Espressif** lewat Board Manager.
 2. Install library lewat Library Manager:
    - **DHT sensor library** (Adafruit) + **Adafruit Unified Sensor**
    - **ESP32Servo**
    - **ArduinoJson** (v7)
-3. Salin `firmware/smart_greenhouse/config.example.h` menjadi `config.h`, lalu isi WiFi, `SERVER_URL`, `DEVICE_ID`, dan `DEVICE_KEY`. `DEVICE_KEY` harus sama dengan `api_key` di tabel `devices`. Kosongkan `WIFI_SSID` untuk tes offline di breadboard.
+   - **PubSubClient** (Nick O'Leary), untuk MQTT
+3. Salin `firmware/smart_greenhouse/config.example.h` menjadi `config.h`, lalu isi WiFi, `SERVER_URL`, `DEVICE_ID`, dan `DEVICE_KEY`. `DEVICE_KEY` harus sama dengan `api_key` di tabel `devices`. Kosongkan `WIFI_SSID` untuk tes offline di breadboard. Untuk MQTT, isi juga `MQTT_HOST`, `MQTT_USER`, `MQTT_PASS` (kosongkan `MQTT_HOST` = MQTT nonaktif).
 4. Pilih board **ESP32 Dev Module**.
 5. Lepas daya 5 V dari adaptor sebelum upload lewat USB (lihat [safety.md](safety.md)).
-6. Buka Serial Monitor (115200, Newline) dan cek baris boot: alasan reset terakhir dan status WiFi.
+6. Buka Serial Monitor (115200, Newline) dan cek baris boot: alasan reset terakhir dan status WiFi. Perintah `status` juga menampilkan status MQTT.
 
 WiFi harus 2,4 GHz (ESP32 tidak mendukung 5 GHz). `SERVER_URL` ditulis tanpa garis miring di akhir.
 
@@ -152,7 +178,8 @@ Catat versi board package dan library yang dipakai saat firmware terakhir terbuk
 | DHT sensor library | _isi_ |
 | Adafruit Unified Sensor | _isi_ |
 | ESP32Servo | _isi_ |
-| ArduinoJson | _isi (harus v7)_ |
+| ArduinoJson | 7.4.3 |
+| PubSubClient | _isi_ |
 
 ## Selanjutnya
 
