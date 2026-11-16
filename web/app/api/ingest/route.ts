@@ -8,7 +8,7 @@
 import { after } from "next/server";
 import { sql } from "@/lib/db";
 import { bad, num, oneOf, readJson, safeEqual } from "@/lib/http";
-import { eventAlert, fmtDuration, notify, waEnabled, type NotifyKind } from "@/lib/notify";
+import { autoActionLine, autoActionsText, autoEventsEnabled, eventAlert, fmtDuration, notify, waEnabled, type NotifyKind } from "@/lib/notify";
 import { SETTINGS_COLUMNS } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +30,7 @@ export async function POST(req: Request) {
   const r = body.reading as Record<string, unknown> | undefined;
   const events = Array.isArray(body.events) ? body.events.slice(0, 50) : [];
   const alerts: { kind: NotifyKind; text: string; at: Date }[] = [];
+  const autoEvents: { actuator: string; action: string; value: number | null; trigger: string; at: Date; fresh: boolean }[] = [];
   let prev: { prev_seen: Date | null; alert_at: Date | null } | undefined;
 
   await sql.begin(async (tx) => {
@@ -50,10 +51,12 @@ export async function POST(req: Request) {
       const ts = new Date(now - age);
       const action = String(e.action ?? "").slice(0, 32);
       const value = num(e.value, -1e9, 1e9);
+      const trigger = oneOf(e.trigger, TRIGGERS) ?? "auto";
+      if (trigger === "auto") autoEvents.push({ actuator, action, value, trigger, at: ts, fresh: age < 60_000 });
       await tx`
         insert into actuator_events (device_id, ts, actuator, action, value, trigger, detail)
         values (${deviceId}, ${ts}, ${actuator}, ${action},
-                ${value}, ${oneOf(e.trigger, TRIGGERS) ?? "auto"},
+                ${value}, ${trigger},
                 ${e.detail ? tx.json(e.detail as never) : null})`;
       const reason = (e.detail as { reason?: unknown } | undefined)?.reason;
       const alert = eventAlert({ actuator, action, value, reason: typeof reason === "string" ? reason : undefined });
@@ -67,24 +70,6 @@ export async function POST(req: Request) {
       returning prev.last_seen as prev_seen, prev.offline_alert_at as alert_at`;
   });
 
-  // Notifikasi WA dikirim setelah respons, supaya ESP32 tidak menunggu Fonnte
-  if (waEnabled()) {
-    const device = { id: deviceId, name: dev.name as string };
-    const hasReading = !!r && typeof r === "object";
-    after(async () => {
-      try {
-        if (prev?.alert_at) {
-          const down = prev.prev_seen ? ` setelah offline ±${fmtDuration(now - prev.prev_seen.getTime())}` : "";
-          await notify(device, "online", `✅ *Node online lagi*${down}. Data dan perintah web jalan kembali.`);
-        }
-        for (const a of alerts) await notify(device, a.kind, a.text, a.at);
-        if (hasReading) await checkSensors(device);
-      } catch (e) {
-        console.error("[wa]", e);
-      }
-    });
-  }
-
   await sql`
     update commands set status = 'expired'
     where device_id = ${deviceId} and status = 'pending'
@@ -97,6 +82,35 @@ export async function POST(req: Request) {
     returning id::int as id, type, payload`;
 
   const [settings] = await sql`select ${sql(SETTINGS_COLUMNS)} from device_settings where device_id = ${deviceId}`;
+
+  // Notifikasi WA dikirim setelah respons, supaya ESP32 tidak menunggu Fonnte
+  if (waEnabled()) {
+    const device = { id: deviceId, name: dev.name as string };
+    const hasReading = !!r && typeof r === "object";
+    after(async () => {
+      try {
+        if (prev?.alert_at) {
+          const down = prev.prev_seen ? ` setelah offline ±${fmtDuration(now - prev.prev_seen.getTime())}` : "";
+          await notify(device, "online", `✅ *Node online lagi*${down}. Data dan perintah web jalan kembali.`);
+        }
+        for (const a of alerts) await notify(device, a.kind, a.text, a.at);
+        if (hasReading) await checkSensors(device);
+        if (autoEventsEnabled() && autoEvents.length) {
+          const reading = hasReading
+            ? { soil_pct: num(r.soil_pct, 0, 100), temperature_c: num(r.temperature_c, -20, 80), humidity_pct: num(r.humidity_pct, 0, 100) }
+            : undefined;
+          const lines = autoEvents.flatMap((e) => {
+            const text = autoActionLine(e, { settings, reading: e.fresh ? reading : undefined });
+            return text ? [{ text, at: e.at }] : [];
+          });
+          if (lines.length) await notify(device, "auto", autoActionsText(lines), lines[lines.length - 1].at);
+        }
+      } catch (e) {
+        console.error("[wa]", e);
+      }
+    });
+  }
+
 
   return Response.json({ settings, commands, server_time: Math.floor(now / 1000) });
 }

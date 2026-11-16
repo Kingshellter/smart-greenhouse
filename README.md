@@ -111,6 +111,7 @@ npm run dev                    # http://localhost:3000
 | Sensor tidak terbaca | 2 reading berturut-turut tanpa nilai | 60 menit |
 | ESP32 restart karena brownout | event `system boot` | 30 menit |
 | Node offline / online lagi | `/api/cron/offline` (setelah `WA_OFFLINE_MIN`, default 5 menit) / reading pertama setelahnya | sekali per kejadian |
+| Aksi otomatis: siram, tutup dibuka/ditutup (beserta alasannya, mis. suhu ≥ batas) | event dengan trigger `auto` | tiap aksi; aksi dalam satu sync digabung jadi satu pesan. Matikan dengan `WA_AUTO_EVENTS=0` |
 
 Semua pesan (berhasil atau gagal) tercatat di tabel `notifications`. Untuk uji tanpa mengirim, isi `WA_DRY_RUN=1`: pesan hanya ditulis ke log server.
 

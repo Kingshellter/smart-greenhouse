@@ -5,11 +5,12 @@
 //   FONNTE_TOKEN  token device dari dashboard Fonnte
 //   WA_TARGET     nomor tujuan, pisahkan koma (08xx / 628xx). Boleh juga ID grup Fonnte.
 //   WA_DRY_RUN=1  jangan kirim, cukup tulis ke log server (untuk uji)
+//   WA_AUTO_EVENTS=0  matikan pesan untuk tiap aksi otomatis (siram, buka/tutup tutup); default aktif
 //   APP_URL       opsional, untuk tautan dashboard di pesan (di Vercel otomatis dari domain production)
 
 import { sql, APP_TZ } from "@/lib/db";
 
-export type NotifyKind = "tank_warning" | "safety" | "brownout" | "sensor" | "offline" | "online";
+export type NotifyKind = "tank_warning" | "safety" | "brownout" | "sensor" | "offline" | "online" | "auto";
 
 /** Jeda minimum antar pesan sejenis per node, supaya tidak spam. offline/online diatur oleh state, bukan cooldown. */
 const COOLDOWN_MIN: Record<NotifyKind, number> = {
@@ -19,7 +20,10 @@ const COOLDOWN_MIN: Record<NotifyKind, number> = {
   sensor: 60,
   offline: 0,
   online: 0,
+  auto: 0, // tiap aksi otomatis dikabarkan; aksi dalam satu sync digabung jadi satu pesan
 };
+
+export const autoEventsEnabled = () => process.env.WA_AUTO_EVENTS !== "0";
 
 /** Node dianggap offline (untuk peringatan WA) setelah sekian menit tanpa data. */
 export const OFFLINE_ALERT_MIN = Math.max(1, Number(process.env.WA_OFFLINE_MIN) || 5);
@@ -124,4 +128,55 @@ export function eventAlert(e: { actuator: string; action: string; value: number 
       text: "🔌 *ESP32 restart karena brownout* (tegangan turun). Cek adaptor/catu daya, biasanya terjadi saat pompa atau servo menyala.",
     };
   return null;
+}
+
+type AutoCtx = {
+  settings?: Record<string, unknown>;
+  // reading pada sync yang sama; hanya dipakai untuk event yang baru terjadi
+  reading?: { soil_pct: number | null; temperature_c: number | null; humidity_pct: number | null };
+};
+
+const n1 = (v: number) => v.toLocaleString("id-ID", { maximumFractionDigits: 1 });
+
+/** Satu baris pesan untuk aksi otomatis ESP32 (pompa / tutup), null = bukan aksi otomatis. */
+export function autoActionLine(
+  e: { actuator: string; action: string; value: number | null; trigger: string },
+  ctx: AutoCtx,
+): string | null {
+  if (e.trigger !== "auto") return null;
+  const S = ctx.settings ?? {};
+  const R = ctx.reading;
+  if (e.actuator === "pump" && e.action === "run") {
+    const sec = e.value != null ? ` ${n1(e.value / 1000)} detik` : "";
+    const flow = Number(S.pump_flow_ml_s) || 0;
+    const ml = flow > 0 && e.value != null ? `, ±${Math.round((flow * e.value) / 1000)} ml` : "";
+    const why = R?.soil_pct != null && S.soil_dry_pct != null ? ` (tanah ${n1(R.soil_pct)} %, batas ${S.soil_dry_pct} %)` : "";
+    return `💧 Menyiram otomatis${sec}${ml}${why}`;
+  }
+  if (e.actuator === "lid" && (e.action === "open" || e.action === "close")) {
+    const t = R?.temperature_c, h = R?.humidity_pct;
+    let why = "";
+    if (t != null && h != null) {
+      if (e.action === "open") {
+        const hot = S.temp_open_c != null && t >= Number(S.temp_open_c);
+        const humid = S.hum_open_pct != null && h >= Number(S.hum_open_pct);
+        why = hot
+          ? ` (suhu ${n1(t)} °C ≥ ${n1(Number(S.temp_open_c))} °C)`
+          : humid
+            ? ` (RH ${n1(h)} % ≥ ${n1(Number(S.hum_open_pct))} %)`
+            : ` (suhu ${n1(t)} °C, RH ${n1(h)} %)`;
+      } else why = ` (suhu ${n1(t)} °C, RH ${n1(h)} %)`;
+    }
+    return e.action === "open" ? `🌬️ Tutup dibuka otomatis untuk ventilasi${why}` : `🔒 Tutup ditutup otomatis${why}`;
+  }
+  return null;
+}
+
+/** Gabungkan aksi otomatis satu sync jadi satu pesan (banyak aksi = node baru tersambung lagi). */
+export function autoActionsText(lines: { text: string; at: Date }[], max = 10): string {
+  const time = (d: Date) => d.toLocaleTimeString("id-ID", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit" });
+  if (lines.length === 1) return lines[0].text;
+  const shown = lines.slice(0, max).map((l) => `• ${time(l.at)} ${l.text}`);
+  if (lines.length > max) shown.push(`…dan ${lines.length - max} aksi lain (lihat log di dashboard)`);
+  return `🤖 *${lines.length} aksi otomatis:*\n${shown.join("\n")}`;
 }
