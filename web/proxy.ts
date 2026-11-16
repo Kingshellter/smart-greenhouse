@@ -1,6 +1,6 @@
 // Basic auth untuk dashboard + API dashboard.
 // Aktif hanya jika DASHBOARD_USER dan DASHBOARD_PASSWORD diisi.
-// /api/ingest dikecualikan (ESP32 memakai x-device-key).
+// /api/ingest (ESP32, x-device-key) dan /api/cron (CRON_SECRET) dikecualikan.
 
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -21,5 +21,5 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api/ingest|api/health|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api/ingest|api/health|api/cron|_next/static|_next/image|favicon.ico).*)"],
 };

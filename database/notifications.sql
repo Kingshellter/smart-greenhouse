@@ -1,0 +1,33 @@
+-- Notifikasi WhatsApp (Fonnte): log pesan terkirim + penanda node offline.
+-- Jalankan SETELAH schema.sql. Aman dijalankan ulang, juga di database yang sudah berisi data:
+--   psql "$DATABASE_URL" -f database/notifications.sql
+-- Supabase: tempel isi file ini di SQL Editor lalu Run.
+
+create table if not exists notifications (
+  id         bigserial primary key,
+  device_id  text not null references devices(id) on delete cascade,
+  ts         timestamptz not null default now(),
+  kind       text not null,          -- tank_warning | safety | brownout | offline | online
+  message    text not null,
+  ok         boolean not null,       -- false = gagal kirim (lihat error)
+  error      text
+);
+-- dipakai untuk cooldown: "sudah kirim kind ini ke node ini dalam X menit terakhir?"
+create index if not exists notifications_device_kind_ts on notifications (device_id, kind, ts desc);
+alter table notifications enable row level security;
+
+-- Kapan peringatan "node offline" terkirim (null = tidak sedang offline).
+-- Diisi oleh /api/cron/offline, dikosongkan oleh /api/ingest saat node kirim data lagi.
+alter table devices add column if not exists offline_alert_at timestamptz;
+
+-- Role aplikasi di Supabase (kalau ada) perlu izin ke tabel baru
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'greenhouse_app') then
+    grant select, insert, update, delete on notifications to greenhouse_app;
+    grant usage, select on sequence notifications_id_seq to greenhouse_app;
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'notifications' and policyname = 'app_all') then
+      create policy app_all on notifications for all to greenhouse_app using (true) with check (true);
+    end if;
+  end if;
+end $$;

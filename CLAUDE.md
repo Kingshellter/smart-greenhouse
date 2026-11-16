@@ -14,7 +14,7 @@ All web commands run from `web/`:
 npm run dev          # Next.js dev server, http://localhost:3000 (needs DATABASE_URL in web/.env.local)
 npm run build        # production build
 npx tsc --noEmit     # typecheck: the only static check (no linter, no test suite)
-npm run db:init      # apply ../database/schema.sql + presets.sql to $DATABASE_URL
+npm run db:init      # apply ../database/schema.sql + presets.sql + notifications.sql to $DATABASE_URL
 npm run db:check     # test DB connection from .env.local; auto-fixes Supabase aws-0/aws-1 pooler host
 npm run simulate -- --url http://localhost:3000 --id gh-01 --key <api_key>   # fake ESP32 (tools/simulate-esp32.mjs)
 bash scripts/vercel-setup.sh   # push env vars from .env.local to Vercel and deploy prod
@@ -42,6 +42,9 @@ All automatic decisions run **on the device** (`autoControl()` in the `.ino`) an
 - The request carries an optional `reading` (sent every `report_interval_s` or on any state change) and a queue of `events` with `age_ms`. The server turns `age_ms` back into the real event timestamp.
 - The response returns the full settings row plus pending `commands`. Commands go `pending → sent` on pickup and `expired` after 60 s (`COMMAND_TTL_S`), so a node that reconnects late won't run stale actions.
 - These three implementations must stay in lockstep. A protocol change touches all of them.
+
+### WhatsApp notifications (`web/lib/notify.ts`, Fonnte)
+Optional, enabled when `FONNTE_TOKEN` + `WA_TARGET` are set (or `WA_DRY_RUN=1`, which only logs). The server only reports; it never acts. `/api/ingest` maps `system` events (`tank_warning`, `safety`, `boot` with `brownout`) through `eventAlert()` and checks for sensors missing in the last 2 readings, then sends via `after()` so the ESP32's sync isn't delayed. Per-kind cooldowns live in `COOLDOWN_MIN`; every attempt is logged in `notifications` (`database/notifications.sql`). Offline alerts need an external cron hitting `GET /api/cron/offline` with `Authorization: Bearer $CRON_SECRET` (exempt from basic auth in `proxy.ts`); it sets `devices.offline_alert_at`, and the next ingest clears it and sends "online lagi".
 
 ### Settings flow: one name, four places
 A setting's DB column name = the JSON field sent to the ESP32 = the key in `web/lib/settings.ts`. Adding or changing a setting means updating:

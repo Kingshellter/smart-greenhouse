@@ -20,6 +20,11 @@ add DATABASE_URL "$DB"
 add APP_TZ "Asia/Jakarta"
 add DASHBOARD_USER "$USER_NAME"
 add DASHBOARD_PASSWORD "$PASS"
+# Notifikasi WhatsApp (opsional): ikut dikirim hanya jika terisi di .env.local
+for k in FONNTE_TOKEN WA_TARGET CRON_SECRET WA_OFFLINE_MIN; do
+  v=$(grep "^$k=" .env.local | cut -d= -f2- || true)
+  if [ -n "$v" ]; then add "$k" "$v"; fi
+done
 
 echo; echo "Deploy production..."
 npx vercel --prod --yes
