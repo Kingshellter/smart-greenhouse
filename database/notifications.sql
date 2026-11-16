@@ -1,4 +1,4 @@
--- Notifikasi WhatsApp (Fonnte): log pesan, setting per node, penanda node offline.
+-- Notifikasi Telegram: log pesan, setting per node, penanda node offline.
 -- Jalankan SETELAH schema.sql. Aman dijalankan ulang, juga di database yang sudah berisi data:
 --   psql "$DATABASE_URL" -f database/notifications.sql
 -- Supabase: tempel isi file ini di SQL Editor lalu Run.
@@ -20,11 +20,11 @@ alter table notifications enable row level security;
 -- Diisi oleh /api/cron/offline, dikosongkan oleh /api/ingest saat node kirim data lagi.
 alter table devices add column if not exists offline_alert_at timestamptz;
 
--- Setting notifikasi per node: nomor tujuan + jenis pesan yang aktif.
--- Tidak ada baris = semua aktif, nomor dari env WA_TARGET. Tidak dikirim ke ESP32.
+-- Setting notifikasi per node: chat ID Telegram tujuan + jenis pesan yang aktif.
+-- Tidak ada baris = semua aktif, chat ID dari env TELEGRAM_CHAT_ID. Tidak dikirim ke ESP32.
 create table if not exists notify_settings (
   device_id     text primary key references devices(id) on delete cascade,
-  wa_target     text,                            -- null = pakai WA_TARGET dari env
+  tg_chat_id    text,                            -- null = pakai TELEGRAM_CHAT_ID dari env; pisah koma
   tank_warning  boolean not null default true,
   safety        boolean not null default true,
   sensor        boolean not null default true,
@@ -35,6 +35,11 @@ create table if not exists notify_settings (
   updated_at    timestamptz not null default now()
 );
 alter table notify_settings enable row level security;
+
+-- Versi awal memakai WhatsApp (kolom wa_target berisi nomor WA). Nomor WA bukan chat ID Telegram,
+-- jadi kolom lama dibuang dan diganti tg_chat_id (kosong = pakai TELEGRAM_CHAT_ID).
+alter table notify_settings add column if not exists tg_chat_id text;
+alter table notify_settings drop column if exists wa_target;
 
 -- Role aplikasi di Supabase (kalau ada) perlu izin ke tabel baru
 do $$

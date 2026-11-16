@@ -1,4 +1,4 @@
-// Cek node offline → kirim WA. Node yang offline tidak memanggil /api/ingest,
+// Cek node offline → kirim Telegram. Node yang offline tidak memanggil /api/ingest,
 // jadi perlu pemicu dari luar: cron tiap 1–5 menit (mis. cron-job.org, karena
 // cron Vercel Hobby hanya sekali sehari).
 //   GET /api/cron/offline   header: Authorization: Bearer <CRON_SECRET>
@@ -6,7 +6,7 @@
 
 import { sql } from "@/lib/db";
 import { bad, safeEqual } from "@/lib/http";
-import { fmtDuration, notify, OFFLINE_ALERT_MIN, waEnabled } from "@/lib/notify";
+import { fmtDuration, notify, notifyEnabled, OFFLINE_ALERT_MIN } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   if (!secret) return bad("CRON_SECRET belum diisi", 503);
   const auth = req.headers.get("authorization") ?? "";
   if (!safeEqual(auth, `Bearer ${secret}`)) return bad("Tidak diizinkan", 401);
-  if (!waEnabled()) return Response.json({ enabled: false, alerted: [] });
+  if (!notifyEnabled()) return Response.json({ enabled: false, alerted: [] });
 
   // Klaim dulu (hanya node yang pernah online, sudah lewat batas, dan belum dikabarkan),
   // supaya dua cron yang tumpang tindih tidak mengirim dua kali.

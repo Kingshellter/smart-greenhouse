@@ -1,4 +1,4 @@
-// Setting notifikasi WhatsApp per node (tabel notify_settings). Dipakai server dan dashboard.
+// Setting notifikasi Telegram per node (tabel notify_settings). Dipakai server dan dashboard.
 
 export const NOTIFY_TOGGLES = [
   { key: "tank_warning", group: "alert", label: "Tangki air kosong", desc: "Batas dosis per jam tercapai, penyiraman otomatis berhenti" },
@@ -13,38 +13,39 @@ export const NOTIFY_TOGGLES = [
 export type NotifyToggle = (typeof NOTIFY_TOGGLES)[number]["key"];
 export const TOGGLE_KEYS = NOTIFY_TOGGLES.map((t) => t.key) as NotifyToggle[];
 
-export type NotifyPrefs = Record<NotifyToggle, boolean> & { wa_target: string | null };
+export type NotifyPrefs = Record<NotifyToggle, boolean> & { tg_chat_id: string | null };
 
 export const DEFAULT_PREFS: NotifyPrefs = {
   ...(Object.fromEntries(TOGGLE_KEYS.map((k) => [k, true])) as Record<NotifyToggle, boolean>),
-  wa_target: null,
+  tg_chat_id: null,
 };
 
 /** Respons GET /api/devices/:id/notify */
 export type NotifyInfo = NotifyPrefs & {
-  /** token Fonnte ada di server (atau WA_DRY_RUN) */
+  /** token bot Telegram ada di server (atau NOTIFY_DRY_RUN) */
   enabled: boolean;
   dry_run: boolean;
-  /** ada WA_TARGET di env yang dipakai kalau nomor node kosong */
+  /** ada TELEGRAM_CHAT_ID di env yang dipakai kalau chat ID node kosong */
   env_target: boolean;
+  /** username bot (tanpa @), null kalau token kosong / tidak valid */
+  bot: string | null;
 };
 
+/** Satu chat yang pernah mengirim pesan ke bot (GET /api/notify/chats). */
+export type TelegramChat = { id: string; type: string; name: string };
+
 /**
- * Rapikan daftar nomor: pisah koma/baris, buang spasi, tanda hubung dan "+".
- * Nomor 8–15 digit atau ID grup Fonnte (…@g.us), maks 10. "" → null. String = pesan error.
+ * Rapikan daftar chat ID: pisah koma/baris, buang spasi.
+ * Chat ID angka (grup/kanal diawali "-", mis. -100…) atau @namakanal, maks 10. "" → null. String = pesan error.
  */
-export function parseTargets(v: unknown): string | null | { error: string } {
+export function parseChatIds(v: unknown): string | null | { error: string } {
   if (v == null) return null;
-  if (typeof v !== "string") return { error: "Nomor tujuan harus teks" };
+  if (typeof v !== "string") return { error: "Chat ID harus teks" };
   const items = v.split(/[,\n;]/).map((x) => x.trim()).filter(Boolean);
   if (!items.length) return null;
-  if (items.length > 10) return { error: "Maksimal 10 nomor tujuan" };
-  const out: string[] = [];
-  for (const raw of items) {
-    if (/^\d{10,30}@g\.us$/.test(raw)) { out.push(raw); continue; }
-    const n = raw.replace(/[\s\-().]/g, "").replace(/^\+/, "");
-    if (!/^\d{8,15}$/.test(n)) return { error: `Nomor tidak valid: ${raw}` };
-    out.push(n);
+  if (items.length > 10) return { error: "Maksimal 10 chat ID" };
+  for (const id of items) {
+    if (!/^-?\d{5,20}$/.test(id) && !/^@[A-Za-z][A-Za-z0-9_]{4,31}$/.test(id)) return { error: `Chat ID tidak valid: ${id}` };
   }
-  return [...new Set(out)].join(",");
+  return [...new Set(items)].join(",");
 }

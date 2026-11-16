@@ -8,7 +8,7 @@
 import { after } from "next/server";
 import { sql } from "@/lib/db";
 import { bad, num, oneOf, readJson, safeEqual } from "@/lib/http";
-import { autoActionLine, autoActionsText, eventAlert, fmtDuration, getNotifyPrefs, notify, waEnabled, type NotifyKind } from "@/lib/notify";
+import { autoActionLine, autoActionsText, eventAlert, fmtDuration, getNotifyPrefs, notify, notifyEnabled, type NotifyKind } from "@/lib/notify";
 import type { NotifyPrefs } from "@/lib/notify-prefs";
 import { SETTINGS_COLUMNS } from "@/lib/settings";
 
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
       const alert = eventAlert({ actuator, action, value, reason: typeof reason === "string" ? reason : undefined });
       if (alert) alerts.push({ ...alert, at: ts });
     }
-    // offline_alert_at terisi = sempat dikabarkan offline lewat WA → kabarkan online lagi
+    // offline_alert_at terisi = sempat dikabarkan offline lewat Telegram → kabarkan online lagi
     [prev] = await tx<{ prev_seen: Date | null; alert_at: Date | null }[]>`
       with prev as (select last_seen, offline_alert_at from devices where id = ${deviceId} for update)
       update devices d set last_seen = now(), offline_alert_at = null from prev
@@ -84,8 +84,8 @@ export async function POST(req: Request) {
 
   const [settings] = await sql`select ${sql(SETTINGS_COLUMNS)} from device_settings where device_id = ${deviceId}`;
 
-  // Notifikasi WA dikirim setelah respons, supaya ESP32 tidak menunggu Fonnte
-  if (waEnabled()) {
+  // Notifikasi Telegram dikirim setelah respons, supaya ESP32 tidak menunggu Bot API
+  if (notifyEnabled()) {
     const device = { id: deviceId, name: dev.name as string };
     const hasReading = !!r && typeof r === "object";
     after(async () => {

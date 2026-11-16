@@ -35,7 +35,7 @@ Browser ◀── dashboard + analitik (Next.js) ──▶ /api/devices/...
    - baris aktuator di kanan bisa dibuka (pompa, tutup, WiFi): angka analitik
    - popup tanaman: tab *Tanaman* (preset bergambar, ambang siram/suhu/RH) dan tab *Kalibrasi alat* (ADC tanah, pompa, sudut servo, interval kirim)
 
-5. **WhatsApp** (opsional, lewat Fonnte): server mengabarkan kejadian yang perlu tindakan, yaitu tangki air kemungkinan kosong, pompa dihentikan pengaman, sensor tidak terbaca, ESP32 restart karena brownout, dan node offline / online lagi. Server hanya mengabarkan; keputusan tetap di ESP32.
+5. **Telegram** (opsional, lewat bot Telegram): server mengabarkan kejadian yang perlu tindakan, yaitu tangki air kemungkinan kosong, pompa dihentikan pengaman, sensor tidak terbaca, ESP32 restart karena brownout, dan node offline / online lagi. Server hanya mengabarkan; keputusan tetap di ESP32.
 
 > Alur utama prototipe adalah **satu arah**: sensor → ESP32 → cloud → web. Kontrol dari web (mode manual) hanya fitur tambahan. Kalau tidak dipakai saat demo, biarkan mode tetap *otomatis*.
 
@@ -46,7 +46,7 @@ Browser ◀── dashboard + analitik (Next.js) ──▶ /api/devices/...
 | Ukur kondisi (sensor) | `readSoil()`, `readDht()`, dihaluskan dengan EMA |
 | Putuskan aksi otomatis (ESP32) | `autoControl()`: siram per dosis + waktu meresap; ventilasi dengan hysteresis 32/29 °C |
 | Kirim data → simpan → tampilkan | `/api/ingest` → tabel `readings` & `actuator_events` → dashboard |
-| Pengguna: "Perlu bertindak?" | Banner status: normal / cek tangki air / sensor tidak terbaca / node offline, plus pesan WhatsApp untuk kejadian yang sama |
+| Pengguna: "Perlu bertindak?" | Banner status: normal / cek tangki air / sensor tidak terbaca / node offline, plus pesan Telegram untuk kejadian yang sama |
 | Pilih mode manual → kirim perintah → ESP32 jalankan | Bar kontrol (Otomatis/Manual/Maintenance) + tombol siram/buka/tutup → tabel `commands` → ESP32 mengambilnya saat sync |
 | Status terbaru tampil | Reading baru dikirim segera setelah ada perubahan state |
 
@@ -96,12 +96,13 @@ npm run dev                    # http://localhost:3000
 2. Isi environment variables `DATABASE_URL`, `DASHBOARD_USER`, `DASHBOARD_PASSWORD`.
 3. Deploy. URL hasil deploy menjadi `SERVER_URL` di firmware.
 
-**Notifikasi WhatsApp (opsional):**
+**Notifikasi Telegram (opsional):**
 
-1. Daftar di [fonnte.com](https://fonnte.com), tambah device, lalu scan QR dengan nomor WA pengirim (sebaiknya nomor khusus, bukan nomor pribadi).
-2. Isi env `FONNTE_TOKEN` (token device). Jalankan `database/notifications.sql` jika belum.
-3. Atur per node lewat tombol 🔔 di navigasi dashboard node: nomor tujuan (pisah koma) dan jenis pesan yang dikirim, plus tombol *Kirim pesan uji*. Nomor yang dikosongkan memakai env `WA_TARGET` (opsional, nomor bawaan untuk semua node). Token Fonnte (nomor pengirim) tetap satu untuk seluruh web.
-4. Untuk peringatan *node offline*, isi `CRON_SECRET` (string acak) lalu buat job di [cron-job.org](https://cron-job.org) tiap 5 menit:
+1. Buat bot lewat [@BotFather](https://t.me/BotFather) (`/newbot`), lalu salin tokennya.
+2. Isi env `TELEGRAM_BOT_TOKEN` (di `.env.local` dan di Vercel; jangan di-commit). Jalankan `database/notifications.sql` jika belum.
+3. Kirim `/start` ke bot dari akun Telegram penerima (atau tambahkan bot ke grup dan kirim satu pesan di sana).
+4. Atur per node lewat tombol 🔔 di navigasi dashboard node: tekan *Cari chat ID* untuk memilih chat yang baru mengirim pesan ke bot, pilih jenis pesan yang dikirim, lalu *Kirim pesan uji*. Chat ID yang dikosongkan memakai env `TELEGRAM_CHAT_ID` (opsional, tujuan bawaan untuk semua node, pisah koma). Token bot tetap satu untuk seluruh web.
+5. Untuk peringatan *node offline*, isi `CRON_SECRET` (string acak) lalu buat job di [cron-job.org](https://cron-job.org) tiap 5 menit:
    `GET https://<domain>/api/cron/offline` dengan header `Authorization: Bearer <CRON_SECRET>`.
    (Node yang offline tidak mengirim apa-apa, jadi perlu pemicu dari luar; cron Vercel Hobby hanya sekali sehari.)
 
@@ -113,10 +114,10 @@ Semua jenis aktif secara bawaan; tiap jenis bisa dimatikan per node.
 | Pompa dihentikan pengaman | event `system safety` | 15 menit |
 | Sensor tidak terbaca | 2 reading berturut-turut tanpa nilai | 60 menit |
 | Restart karena brownout | event `system boot` | 30 menit |
-| Node offline / online lagi | `/api/cron/offline` (setelah `WA_OFFLINE_MIN`, default 5 menit) / reading pertama setelahnya | sekali per kejadian |
+| Node offline / online lagi | `/api/cron/offline` (setelah `NOTIFY_OFFLINE_MIN`, default 5 menit) / reading pertama setelahnya | sekali per kejadian |
 | Siram otomatis / Ventilasi otomatis (beserta alasannya, mis. suhu ≥ batas) | event pompa / tutup dengan trigger `auto` | tiap aksi; aksi dalam satu sync digabung jadi satu pesan |
 
-Semua pesan (berhasil atau gagal) tercatat di tabel `notifications`. Untuk uji tanpa mengirim, isi `WA_DRY_RUN=1`: pesan hanya ditulis ke log server.
+Semua pesan (berhasil atau gagal) tercatat di tabel `notifications`. Untuk uji tanpa mengirim, isi `NOTIFY_DRY_RUN=1`: pesan hanya ditulis ke log server.
 
 **Uji tanpa hardware:**
 
@@ -184,9 +185,10 @@ Skema lengkap: `docs/skema_wiring_esp32_greenhouse.png`
 | Method | Endpoint | Fungsi |
 |---|---|---|
 | POST | `/api/ingest` | Dari ESP32 (header `x-device-key`) |
-| GET / PUT | `/api/devices/:id/notify` | Setting notifikasi WhatsApp node (nomor + jenis pesan) |
-| POST | `/api/devices/:id/notify/test` | Kirim pesan WA uji |
-| GET | `/api/cron/offline` | Cek node offline → WhatsApp (header `Authorization: Bearer <CRON_SECRET>`) |
+| GET / PUT | `/api/devices/:id/notify` | Setting notifikasi Telegram node (chat ID + jenis pesan) |
+| POST | `/api/devices/:id/notify/test` | Kirim pesan Telegram uji |
+| GET | `/api/notify/chats` | Chat yang baru mengirim pesan ke bot (untuk memilih chat ID) |
+| GET | `/api/cron/offline` | Cek node offline → Telegram (header `Authorization: Bearer <CRON_SECRET>`) |
 | GET / POST | `/api/devices` | Daftar node / tambah node |
 | GET | `/api/devices/:id/state` | Status terkini + setting |
 | PUT | `/api/devices/:id/settings` | Ubah threshold/kalibrasi/mode |

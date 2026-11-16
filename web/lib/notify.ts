@@ -1,16 +1,16 @@
-// Notifikasi WhatsApp lewat Fonnte (https://fonnte.com).
+// Notifikasi lewat bot Telegram (https://core.telegram.org/bots/api).
 // Server hanya MENGABARKAN kejadian; keputusan aktuator tetap di ESP32.
 //
 // Env (berlaku untuk semua node):
-//   FONNTE_TOKEN  token device dari dashboard Fonnte
-//   WA_TARGET     nomor tujuan bawaan, pisahkan koma (08xx / 628xx). Boleh juga ID grup Fonnte.
-//                 Tiap node bisa punya nomor sendiri + pilihan jenis pesan (tabel notify_settings,
-//                 diatur dari tombol lonceng di dashboard node).
-//   WA_DRY_RUN=1  jangan kirim, cukup tulis ke log server (untuk uji)
-//   APP_URL       opsional, untuk tautan dashboard di pesan (di Vercel otomatis dari domain production)
+//   TELEGRAM_BOT_TOKEN  token bot dari @BotFather
+//   TELEGRAM_CHAT_ID    chat ID tujuan bawaan, pisahkan koma (angka; grup diawali -100…, atau @namakanal).
+//                       Tiap node bisa punya chat ID sendiri + pilihan jenis pesan (tabel notify_settings,
+//                       diatur dari tombol lonceng di dashboard node).
+//   NOTIFY_DRY_RUN=1    jangan kirim, cukup tulis ke log server (untuk uji)
+//   APP_URL             opsional, untuk tautan dashboard di pesan (di Vercel otomatis dari domain production)
 
 import { sql, APP_TZ } from "@/lib/db";
-import { DEFAULT_PREFS, TOGGLE_KEYS, type NotifyPrefs, type NotifyToggle } from "@/lib/notify-prefs";
+import { DEFAULT_PREFS, TOGGLE_KEYS, type NotifyPrefs, type NotifyToggle, type TelegramChat } from "@/lib/notify-prefs";
 
 export type NotifyKind = "tank_warning" | "safety" | "brownout" | "sensor" | "offline" | "online" | "auto" | "test";
 
@@ -38,18 +38,19 @@ const TOGGLE_OF: Record<NotifyKind, NotifyToggle | null> = {
   test: null,
 };
 
-/** Node dianggap offline (untuk peringatan WA) setelah sekian menit tanpa data. */
-export const OFFLINE_ALERT_MIN = Math.max(1, Number(process.env.WA_OFFLINE_MIN) || 5);
+/** Node dianggap offline (untuk peringatan Telegram) setelah sekian menit tanpa data. */
+export const OFFLINE_ALERT_MIN = Math.max(1, Number(process.env.NOTIFY_OFFLINE_MIN) || 5);
 
-export const DRY_RUN = process.env.WA_DRY_RUN === "1";
-/** Server bisa mengirim (ada token). Nomor tujuan dicek per node. */
-export const waEnabled = () => DRY_RUN || !!process.env.FONNTE_TOKEN;
-export const envTarget = () => process.env.WA_TARGET?.trim() || null;
+export const DRY_RUN = process.env.NOTIFY_DRY_RUN === "1";
+const token = () => process.env.TELEGRAM_BOT_TOKEN?.trim() || "";
+/** Server bisa mengirim (ada token bot). Chat ID tujuan dicek per node. */
+export const notifyEnabled = () => DRY_RUN || !!token();
+export const envTarget = () => process.env.TELEGRAM_CHAT_ID?.trim() || null;
 
-/** Setting notifikasi node; tanpa baris = semua aktif, nomor dari env. */
+/** Setting notifikasi node; tanpa baris = semua aktif, chat ID dari env. */
 export async function getNotifyPrefs(deviceId: string): Promise<NotifyPrefs> {
   const [row] = await sql<NotifyPrefs[]>`
-    select wa_target, ${sql(TOGGLE_KEYS)} from notify_settings where device_id = ${deviceId}`;
+    select tg_chat_id, ${sql(TOGGLE_KEYS)} from notify_settings where device_id = ${deviceId}`;
   return row ? { ...DEFAULT_PREFS, ...row } : { ...DEFAULT_PREFS };
 }
 
@@ -68,28 +69,74 @@ export const fmtDuration = (ms: number) => {
   return m % 60 ? `${h} jam ${m % 60} menit` : `${h} jam`;
 };
 
-async function sendWhatsApp(target: string, message: string): Promise<{ ok: boolean; error?: string }> {
-  if (DRY_RUN) {
-    console.log(`[wa:dry-run] → ${target}\n${message}`);
-    return { ok: true };
-  }
+/** Panggil Bot API. Error dari Telegram dikembalikan sebagai teks (`description`). */
+export async function telegram<T>(method: string, body?: Record<string, unknown>): Promise<{ ok: true; result: T } | { ok: false; error: string }> {
   try {
-    const res = await fetch("https://api.fonnte.com/send", {
+    const res = await fetch(`https://api.telegram.org/bot${token()}/${method}`, {
       method: "POST",
-      headers: { Authorization: process.env.FONNTE_TOKEN! },
-      body: new URLSearchParams({ target, message, countryCode: "62" }),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body ?? {}),
       signal: AbortSignal.timeout(10_000),
     });
-    // Fonnte membalas HTTP 200 juga saat gagal; status ada di body
-    const j = (await res.json().catch(() => null)) as { status?: boolean; reason?: string } | null;
-    if (res.ok && j?.status === true) return { ok: true };
-    return { ok: false, error: String(j?.reason ?? `HTTP ${res.status}`).slice(0, 300) };
+    const j = (await res.json().catch(() => null)) as { ok?: boolean; result?: T; description?: string } | null;
+    if (j?.ok) return { ok: true, result: j.result as T };
+    return { ok: false, error: String(j?.description ?? `HTTP ${res.status}`).slice(0, 300) };
   } catch (e) {
     return { ok: false, error: (e as Error).message.slice(0, 300) };
   }
 }
 
-/** sent = terkirim; skipped = nonaktif / dimatikan untuk node ini / tanpa nomor / masih cooldown; failed = gagal kirim. */
+let botCache: { token: string; username: string | null } | null = null;
+/** Username bot (tanpa @), di-cache per token. null = token kosong / ditolak Telegram. */
+export async function botUsername(): Promise<string | null> {
+  const t = token();
+  if (!t) return null;
+  if (botCache?.token === t) return botCache.username;
+  const r = await telegram<{ username?: string }>("getMe");
+  const username = r.ok ? (r.result.username ?? null) : null;
+  if (r.ok) botCache = { token: t, username };
+  return username;
+}
+
+/**
+ * Chat yang baru mengirim pesan ke bot (mis. /start), untuk mengisi chat ID tanpa mencari manual.
+ * Telegram hanya menyimpan update ±24 jam dan hanya kalau bot tidak memakai webhook.
+ */
+export async function recentChats(): Promise<{ ok: true; chats: TelegramChat[] } | { ok: false; error: string }> {
+  type Chat = { id: number; type: string; title?: string; username?: string; first_name?: string; last_name?: string };
+  type Update = { message?: { chat: Chat }; edited_message?: { chat: Chat }; channel_post?: { chat: Chat }; my_chat_member?: { chat: Chat } };
+  const r = await telegram<Update[]>("getUpdates", { limit: 100, allowed_updates: ["message", "channel_post", "my_chat_member"] });
+  if (!r.ok) return r;
+  const seen = new Map<string, TelegramChat>();
+  for (const u of r.result) {
+    const c = (u.message ?? u.edited_message ?? u.channel_post ?? u.my_chat_member)?.chat;
+    if (!c) continue;
+    const name = c.title ?? ([c.first_name, c.last_name].filter(Boolean).join(" ") || (c.username ? `@${c.username}` : String(c.id)));
+    seen.set(String(c.id), { id: String(c.id), type: c.type, name });
+  }
+  return { ok: true, chats: [...seen.values()].reverse() };
+}
+
+/** Teks pesan memakai *tebal* (gaya chat); Telegram dikirim sebagai HTML supaya simbol lain tidak merusak format. */
+const toHtml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\*([^*\n]+)\*/g, "<b>$1</b>");
+
+async function sendTelegram(targets: string, message: string): Promise<{ ok: boolean; error?: string }> {
+  const ids = targets.split(",").map((t) => t.trim()).filter(Boolean);
+  if (DRY_RUN) {
+    console.log(`[telegram:dry-run] → ${ids.join(", ")}\n${message}`);
+    return { ok: true };
+  }
+  const errors: string[] = [];
+  for (const chat_id of ids) {
+    const r = await telegram("sendMessage", { chat_id, text: toHtml(message), parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+    if (!r.ok) errors.push(`${chat_id}: ${r.error}`);
+  }
+  // berhasil kalau minimal satu chat menerima; chat yang gagal tetap dicatat
+  return errors.length < ids.length ? { ok: true, error: errors.join("; ") || undefined } : { ok: false, error: errors.join("; ").slice(0, 300) };
+}
+
+/** sent = terkirim; skipped = nonaktif / dimatikan untuk node ini / tanpa chat ID / masih cooldown; failed = gagal kirim. */
 export type NotifyResult = { status: "sent" | "skipped" | "failed"; error?: string };
 
 /** Kirim satu pesan untuk node + catat ke tabel notifications. `prefs` boleh diisi supaya tidak dibaca ulang. */
@@ -100,12 +147,12 @@ export async function notify(
   at: Date = new Date(),
   prefs?: NotifyPrefs,
 ): Promise<NotifyResult> {
-  if (!waEnabled()) return { status: "skipped", error: "FONNTE_TOKEN belum diisi di server" };
+  if (!notifyEnabled()) return { status: "skipped", error: "TELEGRAM_BOT_TOKEN belum diisi di server" };
   const p = prefs ?? (await getNotifyPrefs(device.id));
   const toggle = TOGGLE_OF[kind];
   if (toggle && !p[toggle]) return { status: "skipped" };
-  const target = p.wa_target || envTarget();
-  if (!target) return { status: "skipped", error: "Nomor tujuan belum diisi" };
+  const target = p.tg_chat_id || envTarget();
+  if (!target) return { status: "skipped", error: "Chat ID tujuan belum diisi" };
   const cd = COOLDOWN_MIN[kind];
   if (cd > 0) {
     const [recent] = await sql`
@@ -119,11 +166,11 @@ export async function notify(
   const message = [`🌱 *${device.name}* (${device.id})`, text, `🕒 ${fmtTime(at)}`, url && `${url}/devices/${device.id}`]
     .filter(Boolean)
     .join("\n");
-  const r = await sendWhatsApp(target, message);
+  const r = await sendTelegram(target, message);
   await sql`
     insert into notifications (device_id, kind, message, ok, error)
     values (${device.id}, ${kind}, ${message}, ${r.ok}, ${r.error ?? null})`;
-  if (!r.ok) console.error(`[wa] gagal kirim ${kind} untuk ${device.id}: ${r.error}`);
+  if (r.error) console.error(`[telegram] ${r.ok ? "sebagian gagal" : "gagal"} kirim ${kind} untuk ${device.id}: ${r.error}`);
   return r.ok ? { status: "sent" } : { status: "failed", error: r.error };
 }
 
@@ -133,7 +180,7 @@ const SAFETY_REASON: Record<string, string> = {
   "DHT22 invalid": "sensor DHT22 tidak valid",
 };
 
-/** Event dari ESP32 yang layak dikabarkan lewat WA (null = tidak perlu). */
+/** Event dari ESP32 yang layak dikabarkan lewat Telegram (null = tidak perlu). */
 export function eventAlert(e: { actuator: string; action: string; value: number | null; reason?: string }):
   | { kind: NotifyKind; text: string }
   | null {

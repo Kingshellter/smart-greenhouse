@@ -423,13 +423,18 @@ code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .device-settings { display: grid; gap: 22px; }
 .servo-set { gap: 4px; }
 
-/* popup notifikasi WhatsApp: nomor tujuan + daftar sakelar per jenis pesan */
+/* popup notifikasi Telegram: chat ID tujuan + daftar sakelar per jenis pesan */
 /* ukuran tetap: tidak berubah saat memuat, saat pesan muncul, atau saat isi diubah; isi tengah yang di-scroll */
 .nt-dialog { width: min(520px, calc(100vw - 32px)); height: min(680px, calc(100vh - 48px)); height: min(680px, calc(100dvh - 48px)); }
 .nt-form { display: contents; }
 .nt-ico { color: var(--green-ink); flex: none; }
 .nt-target input { width: 100%; }
 .nt-target .alert { margin-top: 4px; }
+.nt-target .field-hint a { color: var(--green-ink); font-weight: 550; }
+.nt-chats { display: grid; gap: 8px; justify-items: start; }
+.nt-chats .nt-list { width: 100%; }
+.nt-chats .nt-row { cursor: default; padding: 8px 12px 8px 16px; }
+.nt-chats .nt-text small { font-variant-numeric: tabular-nums; }
 .nt-group { font-size: 0.85rem; font-weight: 600; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .nt-group small { font-weight: 400; font-size: 0.76rem; color: var(--muted); }
 .nt-list { display: grid; box-shadow: var(--edge); border-radius: var(--radius-md); }
