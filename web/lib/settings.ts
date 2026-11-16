@@ -38,8 +38,8 @@ export const NUMERIC_LIMITS: Record<Exclude<keyof Settings, "mode">, [number, nu
   pump_flow_ml_s: [0, 100],
 };
 
-/** Kecepatan servo tutup (°/s) untuk animasi 3D. Tetap, sama dengan SERVO_STEP_MS = 5 ms/° di firmware. */
-export const SERVO_DEG_PER_S = 1000 / 5;
+/** Kecepatan servo tutup (°/s) untuk animasi 3D. Tetap, sama dengan SERVO_STEP_MS = 15 ms/° di firmware. */
+export const SERVO_DEG_PER_S = 1000 / 15;
 
 export const SETTINGS_COLUMNS =["mode", ...Object.keys(NUMERIC_LIMITS)] as (keyof Settings)[];
 

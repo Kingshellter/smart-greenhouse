@@ -43,7 +43,7 @@ constexpr uint32_t POLL_INTERVAL_MS  = 3000;   // sync ke server (ambil perintah
 constexpr uint32_t DHT_INTERVAL_MS   = 2500;   // DHT22 maks 1x per 2 detik
 constexpr uint32_t SOIL_INTERVAL_MS  = 1000;
 constexpr uint32_t SERVO_HOLD_MS     = 600;    // jeda setelah sampai sebelum HTTP boleh jalan lagi (servo TIDAK di-detach)
-constexpr uint32_t SERVO_STEP_MS     = 5;      // kecepatan servo tetap: 5 ms per 1° (sangat cepat, tetap bertahap agar tutup tidak terbanting)
+constexpr uint32_t SERVO_STEP_MS     = 15;     // kecepatan servo tetap: 15 ms per 1° (bertahap agar tutup tidak terbanting dan arus servo tidak melonjak)
 constexpr int      SOIL_RAW_MIN_OK   = 100;    // di luar rentang ini = sensor lepas/korslet
 constexpr int      SOIL_RAW_MAX_OK   = 4000;
 constexpr int      DHT_MAX_FAILS     = 3;      // NaN berturut-turut sebelum dianggap invalid
