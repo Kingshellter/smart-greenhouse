@@ -131,19 +131,21 @@ HTTP tetap jalan seperti biasa (penyimpanan data, analitik, notifikasi). MQTT me
 
 | Topik | Arah | Isi |
 |---|---|---|
-| `<prefix>/<id>/state` | ESP32 → broker → dashboard | reading + state aktuator (JSON, retained), dikirim saat berubah dan minimal tiap 3 s, termasuk saat pompa menyala dan servo bergerak |
+| `<prefix>/<id>/state` | ESP32 → broker → dashboard | reading + state aktuator (JSON, retained). Perubahan aktuator dikirim seketika (termasuk saat pompa menyala dan servo bergerak), perubahan sensor paling cepat tiap 2 s, heartbeat tiap 10 s; cukup hemat untuk kuota broker gratis |
 | `<prefix>/<id>/status` | ESP32 → broker | `online` / `offline` (LWT: broker menulis `offline` sendiri kalau ESP32 hilang) |
 | `<prefix>/<id>/cmd` | server → ESP32 | perintah `{id, type, payload}` begitu tombol ditekan; ESP32 melewati id yang sudah dijalankan, karena HTTP sync tetap mengantarkannya sebagai cadangan |
 | `<prefix>/<id>/settings` | server → ESP32 | setting lengkap (retained) begitu disimpan |
 
 `<prefix>` bawaan `greenhouse`. Aturan mode tetap sama: server menolak perintah di mode otomatis, dan firmware juga memeriksanya sendiri.
 
-1. Buat cluster gratis di [HiveMQ Cloud](https://console.hivemq.cloud) (Serverless). Catat host-nya (`xxxx.s1.eu.hivemq.cloud`).
-2. Di *Access Management*, buat 3 akun:
-   - **device** (publish + subscribe) → `MQTT_USER`/`MQTT_PASS` di `config.h` firmware
-   - **server** (publish) → `MQTT_SERVER_USER`/`MQTT_SERVER_PASS`
-   - **dashboard** (subscribe saja; kredensial ini terlihat di browser) → `MQTT_VIEW_USER`/`MQTT_VIEW_PASS`
-3. Isi env web (di `.env.local` dan Vercel): `MQTT_URL=mqtts://<host>:8883`, `MQTT_WS_URL=wss://<host>:8884/mqtt`, plus akun di atas.
+Broker yang disarankan: **EMQX Cloud Serverless** (gratis permanen: 1 juta session minutes + 1 GB trafik per bulan, TLS + WebSocket). HiveMQ Cloud sekarang hanya uji coba 15 hari lalu berbayar. Broker lain juga bisa selama mendukung MQTT over TLS dan WebSocket (wss).
+
+1. Daftar di [EMQX Cloud](https://cloud.emqx.com) → *New Deployment* → **Serverless**. Catat *Address* (host) dari halaman *Overview*: port TLS **8883**, WebSocket TLS **8084**.
+2. Di *Access Control → Authentication*, buat 3 akun:
+   - **device** → `MQTT_USER`/`MQTT_PASS` di `config.h` firmware
+   - **server** → `MQTT_SERVER_USER`/`MQTT_SERVER_PASS`
+   - **dashboard** → `MQTT_VIEW_USER`/`MQTT_VIEW_PASS` (kredensial ini terlihat di browser; batasi lewat *Authorization* supaya hanya boleh subscribe `greenhouse/#`)
+3. Isi env web (di `.env.local` dan Vercel): `MQTT_URL=mqtts://<host>:8883`, `MQTT_WS_URL=wss://<host>:8084/mqtt`, plus akun di atas.
 4. Isi `MQTT_HOST` (+ akun device) di `config.h`, lalu upload ulang firmware.
 
 Kalau semua tersambung, pil di navigasi dashboard berubah jadi **Live · MQTT**. Tanpa env MQTT, dashboard kembali ke polling tiap 3 detik.

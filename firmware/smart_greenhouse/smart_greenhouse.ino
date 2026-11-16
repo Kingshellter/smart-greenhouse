@@ -64,7 +64,9 @@ constexpr uint32_t PUMP_HARD_MAX_MS  = 10000;  // batas mutlak 1x pompa menyala,
 constexpr uint32_t POLL_INTERVAL_MS  = 3000;   // sync ke server (ambil perintah)
 constexpr uint32_t MQTT_RETRY_MS     = 10000;  // jeda sambung ulang broker (connect TLS bisa memblokir 1–3 s)
 constexpr uint32_t MQTT_CHECK_MS     = 250;    // seberapa sering state dicek untuk dikirim
-constexpr uint32_t MQTT_STATE_MS     = 3000;   // state tetap dikirim minimal sekian ms walau tidak berubah
+constexpr uint32_t MQTT_SENSOR_MS    = 2000;   // perubahan nilai sensor saja dikirim paling cepat tiap sekian ms
+constexpr uint32_t MQTT_STATE_MS     = 10000;  // heartbeat: state tetap dikirim minimal sekian ms walau tidak berubah
+// Hemat kuota broker gratis (mis. EMQX Serverless 1 GB/bulan): aktuator seketika, sensor ≤ 1 pesan / 2 s.
 constexpr uint32_t DHT_INTERVAL_MS   = 2500;   // DHT22 maks 1x per 2 detik
 constexpr uint32_t SOIL_INTERVAL_MS  = 1000;
 constexpr uint32_t SERVO_HOLD_MS     = 600;    // jeda setelah sampai sebelum HTTP boleh jalan lagi (servo TIDAK di-detach)
@@ -481,6 +483,7 @@ const bool mqttEnabled = netEnabled && strlen(MQTT_HOST) > 0;
 const String mqttBase = String(MQTT_TOPIC_PREFIX) + "/" + DEVICE_ID + "/";
 uint32_t lastMqttTry = 0, lastStateCheck = 0, lastStatePub = 0;
 String lastStateSent;   // state terakhir yang dikirim (tanpa rssi), untuk deteksi perubahan
+String lastActSent;     // bagian aktuator saja (tutup, pompa, mode, tangki): perubahan ini dikirim seketika
 
 void onMqttMessage(char* topic, byte* payload, unsigned int len) {
   JsonDocument doc;
@@ -506,24 +509,32 @@ void ensureMqtt() {
   mqtt.publish(status.c_str(), "online", true);
   mqtt.subscribe((mqttBase + "cmd").c_str(), 1);
   mqtt.subscribe((mqttBase + "settings").c_str(), 1);
-  lastStateSent = "";   // kirim state segera
+  lastStateSent = ""; lastActSent = "";   // kirim state segera
 }
 
-// Kirim state saat berubah (dicek tiap 250 ms) dan minimal tiap 3 s. Juga jalan saat pompa menyala,
-// jadi dashboard melihat pompa on/off dan tutup bergerak secara langsung.
+// Kirim state: perubahan aktuator seketika (dicek tiap 250 ms, juga saat pompa menyala dan servo bergerak,
+// jadi dashboard melihatnya langsung), perubahan sensor paling cepat tiap 2 s, dan heartbeat tiap 10 s.
 void publishState() {
   if (!mqtt.connected() || millis() - lastStateCheck < MQTT_CHECK_MS) return;
   uint32_t now = lastStateCheck = millis();
   JsonDocument doc;
   JsonObject r = doc.to<JsonObject>();
   fillReading(r, true);
+  String act = String(lidName(lidPos)) + "|" + String(servoPos) + (pumpOn ? "|on" : "|off") +
+               (S.manual ? "|m" : "|a") + (tankWarning ? "|t" : "|-");
   String cmp;
   serializeJson(doc, cmp);
-  if (cmp == lastStateSent && now - lastStatePub < MQTT_STATE_MS) return;
+  uint32_t since = now - lastStatePub;
+  bool due = act != lastActSent                                       // aktuator berubah
+          || (cmp != lastStateSent && since >= MQTT_SENSOR_MS)        // sensor berubah
+          || since >= MQTT_STATE_MS;                                  // heartbeat
+  if (!due) return;
   r["rssi"] = WiFi.RSSI();   // rssi selalu berubah, jadi tidak ikut deteksi perubahan
   String body;
   serializeJson(doc, body);
-  if (mqtt.publish((mqttBase + "state").c_str(), body.c_str(), true)) { lastStateSent = cmp; lastStatePub = now; }
+  if (mqtt.publish((mqttBase + "state").c_str(), body.c_str(), true)) {
+    lastStateSent = cmp; lastActSent = act; lastStatePub = now;
+  }
 }
 
 void ensureWifi() {

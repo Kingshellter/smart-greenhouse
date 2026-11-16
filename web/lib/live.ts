@@ -2,7 +2,8 @@
 
 // State live lewat MQTT (WebSocket) untuk dashboard satu node. Tanpa MQTT_WS_URL di server,
 // hook ini diam saja dan dashboard tetap memakai polling HTTP.
-// ESP32 publish <prefix>/<id>/state saat ada perubahan dan tiap ±3 s, plus <prefix>/<id>/status (LWT).
+// ESP32 publish <prefix>/<id>/state: aktuator seketika, sensor ≤ tiap 2 s, heartbeat tiap 10 s,
+// plus <prefix>/<id>/status (LWT).
 
 import { useEffect, useState } from "react";
 import { api } from "./client";
@@ -24,8 +25,8 @@ export type Live = {
   status: "online" | "offline" | null;
 };
 
-/** Pesan state dianggap live selama sekian ms; ESP32 mengirim minimal tiap ±3 s. */
-export const LIVE_FRESH_MS = 10_000;
+/** Pesan state dianggap live selama sekian ms; ESP32 mengirim heartbeat minimal tiap 10 s. */
+export const LIVE_FRESH_MS = 25_000;
 
 const EMPTY: Live = { connected: false, reading: null, at: 0, status: null };
 

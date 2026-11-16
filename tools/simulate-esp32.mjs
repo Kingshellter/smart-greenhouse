@@ -139,7 +139,7 @@ async function sync() {
 }
 
 // ── MQTT (opsional) ─────────────────────────────────────────────────────────
-let mqttClient = null, lastStateSent = "", lastStatePub = 0;
+let mqttClient = null, lastStateSent = "", lastActSent = "", lastStatePub = 0;
 if (MQTT_URL) {
   // mqtt dipasang di web/node_modules (simulator dijalankan dari web/ lewat `npm run simulate`)
   const require = createRequire(new URL("../web/package.json", import.meta.url));
@@ -154,7 +154,7 @@ if (MQTT_URL) {
     console.log(`[mqtt] terhubung → ${MQTT_URL} (${MQTT_BASE}*)`);
     mqttClient.publish(MQTT_BASE + "status", "online", { qos: 1, retain: true });
     mqttClient.subscribe([MQTT_BASE + "cmd", MQTT_BASE + "settings"], { qos: 1 });
-    lastStateSent = "";
+    lastStateSent = lastActSent = "";
   });
   mqttClient.on("error", (e) => console.error(`[mqtt] ${e.message}`));
   mqttClient.on("message", (topic, buf) => {
@@ -164,13 +164,18 @@ if (MQTT_URL) {
     else if (topic.endsWith("/cmd")) runCommand(msg);
   });
 }
-// Kirim state saat berubah dan minimal tiap 3 s (seperti publishState() di firmware)
+// Seperti publishState() di firmware: aktuator berubah → seketika, sensor berubah → paling cepat tiap 2 s,
+// heartbeat tiap 10 s.
 function publishState() {
   if (!mqttClient?.connected) return;
-  const cmp = JSON.stringify(reading());
-  if (cmp === lastStateSent && Date.now() - lastStatePub < 3000) return;
-  mqttClient.publish(MQTT_BASE + "state", JSON.stringify({ ...JSON.parse(cmp), rssi: -55 - Math.round(Math.random() * 10) }), { retain: true });
+  const r = reading();
+  const cmp = JSON.stringify(r);
+  const act = [r.lid_state, r.lid_angle, r.pump_state, r.mode, r.tank_warning].join("|");
+  const since = Date.now() - lastStatePub;
+  if (act === lastActSent && !(cmp !== lastStateSent && since >= 2000) && since < 10_000) return;
+  mqttClient.publish(MQTT_BASE + "state", JSON.stringify({ ...r, rssi: -55 - Math.round(Math.random() * 10) }), { retain: true });
   lastStateSent = cmp;
+  lastActSent = act;
   lastStatePub = Date.now();
 }
 

@@ -10,7 +10,7 @@
 // Env:
 //   MQTT_URL                  mqtts://<host>:8883 (dipakai server)
 //   MQTT_SERVER_USER/_PASS    akun server: publish
-//   MQTT_WS_URL               wss://<host>:8884/mqtt (dipakai browser)
+//   MQTT_WS_URL               wss://<host>:8084/mqtt (dipakai browser; port WebSocket TLS EMQX)
 //   MQTT_VIEW_USER/_PASS      akun dashboard: cukup subscribe (terlihat di browser!)
 //   MQTT_TOPIC_PREFIX         opsional, bawaan "greenhouse"
 

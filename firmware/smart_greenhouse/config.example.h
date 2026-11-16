@@ -16,8 +16,8 @@
 #define DEVICE_KEY    "ganti-dengan-key-rahasia"
 
 // MQTT (opsional, untuk dashboard real-time). Kosongkan MQTT_HOST = nonaktif, HTTP tetap jalan.
-//   HiveMQ Cloud: host dari halaman cluster (….s1.eu.hivemq.cloud), port TLS 8883,
-//   akun "device" dengan izin publish + subscribe.
+//   EMQX Cloud Serverless: host dari halaman Overview deployment, port TLS 8883,
+//   akun "device" dari Access Control → Authentication.
 #define MQTT_HOST     ""
 #define MQTT_PORT     8883
 #define MQTT_USER     ""
