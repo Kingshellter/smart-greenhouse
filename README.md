@@ -15,13 +15,32 @@ ESP32 ──state + status (LWT)──▶ Broker MQTT ──WebSocket──▶ B
   └──── perintah + setting ◀──────┴── publish dari Next.js API saat tombol ditekan
 ```
 
+## Dokumentasi
+
+| Dokumen | Isi |
+|---|---|
+| [docs/setup.md](docs/setup.md) | Salinan [Panduan Setup](#panduan-setup) di README ini: database, web, deploy Vercel, variabel environment, WhatsApp, simulator, firmware |
+| [docs/hardware.md](docs/hardware.md) | Pin, wiring, perintah Serial, pengaman firmware, urutan tes, pemeliharaan |
+| [docs/bom-and-power.md](docs/bom-and-power.md) | Daftar komponen dan anggaran daya |
+| [docs/safety.md](docs/safety.md) | Catatan keselamatan listrik, air, bagian bergerak |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Gejala, penyebab, dan tindakan |
+| [docs/user-guide.md](docs/user-guide.md) | Cara memakai dashboard |
+| [docs/api.md](docs/api.md) | Referensi API dan protokol ESP32 |
+| [docs/panduan-wiring/index.html](docs/panduan-wiring/index.html) | Panduan wiring interaktif (buka di browser) |
+| [docs/literature-review.md](docs/literature-review.md) | Studi literatur (13 paper) |
+| [docs/dashboard-layout.md](docs/dashboard-layout.md) | Referensi pengembang: layout dashboard, model 3D, styling |
+
+Mulai cepat: [Panduan Setup](#panduan-setup) di bawah → rangkai alat dengan [hardware.md](docs/hardware.md) → jalankan urutan tes.
+
 | Folder | Isi |
 |---|---|
 | `firmware/smart_greenhouse/` | Sketch Arduino ESP32 |
 | `web/` | Backend API dan dashboard web (Next.js 16) |
 | `database/schema.sql` | Skema PostgreSQL (tabel + node pertama) |
 | `database/presets.sql` | Tabel preset tanaman + 7 preset bawaan beserta sumbernya (jalankan setelah `schema.sql`) |
+| `database/notifications.sql` | Setting dan log notifikasi WhatsApp |
 | `tools/simulate-esp32.mjs` | Simulator ESP32, untuk tes tanpa hardware |
+| `docs/` | Dokumentasi, gambar wiring, dan gambar laporan |
 
 ## Cara kerja
 
@@ -34,13 +53,20 @@ ESP32 ──state + status (LWT)──▶ Broker MQTT ──WebSocket──▶ B
    - model 3D yang mengikuti kondisi alat
    - status live dan peringatan (tangki air, sensor tidak terbaca, node offline)
    - log aktuator
-   - titik info di model 3D: ditekan memunculkan kartu berisi nilai sekarang + grafik (riwayat sensor 1 jam–7 hari dengan min/rata/maks hari ini, atau grafik harian pompa/ventilasi). Kartu *Tutup* berisi tombol Tutup/Buka dan kartu *Pompa* tombol Siram; keduanya abu-abu dan terkunci di mode Otomatis/Maintenance
+   - titik info di model 3D: ditekan memunculkan kartu berisi nilai sekarang + grafik (riwayat sensor 1 jam–30 hari dengan min/rata/maks hari ini, atau grafik harian pompa/ventilasi). Kartu *Tutup* berisi tombol Tutup/Buka dan kartu *Pompa* tombol Siram; keduanya abu-abu dan terkunci di mode Otomatis/Maintenance
    - tombol mode mengambang di bawah model: Otomatis / Manual / Maintenance
+<<<<<<< HEAD
    - kartu status sistem (penjelasan di tooltip ⓘ di samping kartu) dan kartu di kiri: tanah, suhu, RH (nilai + grafik 24 jam) dan pompa (penyiraman 7 hari)
    - baris aktuator di kanan bisa dibuka (pompa, tutup, WiFi): angka analitik
    - popup tanaman: tab *Tanaman* (preset bergambar, ambang siram/suhu/RH) dan tab *Kalibrasi alat* (ADC tanah, pompa, sudut servo, interval kirim)
 
 5. **Telegram** (opsional, lewat bot Telegram): server mengabarkan kejadian yang perlu tindakan, yaitu tangki air kemungkinan kosong, pompa dihentikan pengaman, sensor tidak terbaca, ESP32 restart karena brownout, dan node offline / online lagi. Server hanya mengabarkan; keputusan tetap di ESP32.
+=======
+   - kartu status sistem (penjelasan di tooltip ⓘ di samping kartu) dan kartu di kiri: tanah, suhu, RH (nilai + grafik 24 jam)
+   - bar perangkat di bawah (sensor tanah, DHT22, pompa, servo tutup, tangki, WiFi): tiap perangkat bisa dibuka untuk melihat nilai, analitik, dan kalibrasinya
+   - popup tanaman: preset bergambar dengan ambang siram/suhu/RH
+5. **WhatsApp** (opsional, lewat Fonnte): server mengabarkan kejadian yang perlu tindakan, yaitu tangki air kemungkinan kosong, pompa dihentikan pengaman, sensor tidak terbaca, ESP32 restart karena brownout, dan node offline / online lagi. Server hanya mengabarkan; keputusan tetap di ESP32.
+>>>>>>> e1af325c1a67d62689430674d082d2c6ae9e91c0
 
 > Alur utama prototipe adalah **satu arah**: sensor → ESP32 → cloud → web. Kontrol dari web (mode manual) hanya fitur tambahan. Kalau tidak dipakai saat demo, biarkan mode tetap *otomatis*.
 
@@ -61,48 +87,110 @@ ESP32 ──state + status (LWT)──▶ Broker MQTT ──WebSocket──▶ B
 |---|---|---|
 | 2 | Bisa dikembangkan ke banyak node | Setiap data membawa `device_id`. Node baru ditambah lewat halaman awal → *Tambah node* (key dibuat otomatis); firmware cukup diganti `DEVICE_ID`/`DEVICE_KEY`, tanpa ubah kode |
 | 3 | Cloud & web milik sendiri | API Next.js + PostgreSQL buatan tim |
+<<<<<<< HEAD
 | – | Protokol MQTT + dashboard real-time | ESP32 publish state ke broker (`<prefix>/<id>/state`, status online/offline lewat LWT) dan subscribe perintah/setting; dashboard berlangganan lewat WebSocket. Lihat bagian *MQTT* di bawah |
 | 4 | Semua data tersimpan + modul analitik | Tabel `readings`, `actuator_events`, `commands`. Kartu hotspot model 3D (grafik riwayat, min/rata/maks harian, grafik harian pompa & ventilasi) dan baris aktuator yang dibuka: frekuensi & durasi pompa, estimasi air, ventilasi dibuka, % waktu ventilasi terbuka, safety stop |
+=======
+| 4 | Semua data tersimpan + modul analitik | Tabel `readings`, `actuator_events`, `commands`. Kartu hotspot model 3D (grafik riwayat, min/rata/maks harian, grafik harian pompa & ventilasi) dan popup perangkat di bar bawah: frekuensi & durasi pompa, estimasi air, ventilasi dibuka, % waktu ventilasi terbuka, safety stop |
+>>>>>>> e1af325c1a67d62689430674d082d2c6ae9e91c0
 
-## 1. Database
+## Panduan Setup
 
-Bisa memakai Supabase (gratis) atau PostgreSQL sendiri (mis. Docker di home server).
+> Bagian ini sama dengan [docs/setup.md](docs/setup.md). Kalau mengubah salah satunya, ubah juga yang lain.
 
-**Supabase:**
+Urutan pemasangan: database → web → (opsional) WhatsApp → firmware. Untuk wiring lihat [docs/hardware.md](docs/hardware.md), untuk daftar komponen [docs/bom-and-power.md](docs/bom-and-power.md), dan baca [docs/safety.md](docs/safety.md) sebelum merangkai. Referensi endpoint ada di [docs/api.md](docs/api.md). Kalau ada yang tidak jalan, lihat [docs/troubleshooting.md](docs/troubleshooting.md).
+
+### Prasyarat
+
+| Kebutuhan | Keterangan |
+|---|---|
+| Node.js | Versi yang didukung Next.js 16 (LTS terbaru) |
+| PostgreSQL 14+ | Supabase (gratis) atau Postgres sendiri |
+| `psql` | Dipakai `npm run db:init` dan perintah manual di bawah |
+| Arduino IDE | Untuk upload firmware (tidak ada build lewat CLI di repo ini) |
+| Akun Vercel | Opsional, untuk deploy web |
+| Akun Fonnte + nomor WA khusus | Opsional, untuk notifikasi WhatsApp |
+
+### 1. Database
+
+Bisa memakai Supabase atau PostgreSQL sendiri (mis. Docker di home server).
+
+#### Supabase
 
 1. Buat project baru.
 2. Buka SQL Editor, tempel isi `database/schema.sql`, lalu Run. Ulangi untuk `database/presets.sql` dan `database/notifications.sql`.
-3. **Ganti `api_key` node `gh-01`**:
+3. **Ganti `api_key` node `gh-01`** sebelum apa pun dipasang. Nilai bawaannya (`ganti-dengan-key-rahasia`) diketahui semua orang yang membaca repo ini (lihat juga [docs/safety.md](docs/safety.md#data-dan-akun)).
    ```sql
    update devices set api_key = 'isi-key-acak-panjang' where id = 'gh-01';
    ```
+   Contoh membuat key acak: `openssl rand -base64 24`.
 4. Ambil connection string di Project Settings → Database → **Transaction pooler** (port 6543), lalu tambahkan `?sslmode=require` di akhir.
 
-RLS sudah diaktifkan tanpa policy, jadi REST API publik Supabase tidak bisa membaca data. Backend kita terhubung langsung lewat Postgres.
+RLS sudah diaktifkan tanpa policy, jadi REST API publik Supabase tidak bisa membaca data. Backend terhubung langsung lewat Postgres.
 
-**Lokal:**
+#### Lokal
 
 ```bash
 createdb greenhouse
 psql postgresql://user:pass@localhost:5432/greenhouse -f database/schema.sql -f database/presets.sql -f database/notifications.sql
 ```
 
-## 2. Web (backend + dashboard)
+Semua file SQL aman dijalankan ulang (`if not exists` / `on conflict`), jadi boleh dijalankan lagi setelah pull perubahan baru.
+
+### 2. Web (backend + dashboard)
 
 ```bash
 cd web
-cp .env.example .env.local     # isi DATABASE_URL (opsional: DASHBOARD_USER/PASSWORD)
+cp .env.example .env.local     # isi DATABASE_URL (lihat tabel variabel di bawah)
 npm install
 npm run dev                    # http://localhost:3000
 ```
 
-**Deploy ke Vercel:**
+Perintah lain (dari folder `web/`):
+
+| Perintah | Fungsi |
+|---|---|
+| `npm run build` / `npm start` | Build dan jalankan produksi |
+| `npx tsc --noEmit` | Cek tipe (satu-satunya pemeriksaan statis) |
+| `npm run db:init` | Terapkan ketiga file SQL ke `$DATABASE_URL` (jalankan dari Git Bash atau shell yang mengenal `$DATABASE_URL`) |
+| `npm run db:check` | Tes koneksi database; otomatis memperbaiki host pooler Supabase `aws-0`/`aws-1` |
+| `npm run simulate -- --url ... --id ... --key ...` | Simulator ESP32 |
+
+#### Variabel environment
+
+| Variabel | Wajib | Fungsi |
+|---|---|---|
+| `DATABASE_URL` | Ya | Connection string Postgres |
+| `DASHBOARD_USER`, `DASHBOARD_PASSWORD` | Sangat disarankan | Basic auth untuk dashboard dan API dashboard. **Kalau kosong, siapa pun yang tahu URL bisa melihat dan mengontrol node.** `/api/ingest`, `/api/health` dan `/api/cron` dikecualikan dari login |
+| `APP_TZ` | Tidak | Zona waktu analitik harian (bawaan `Asia/Jakarta`) |
+| `FONNTE_TOKEN` | Untuk WA | Token device Fonnte (nomor pengirim) |
+| `WA_TARGET` | Tidak | Nomor tujuan bawaan, pisah koma |
+| `CRON_SECRET` | Untuk peringatan offline | String acak, mis. `openssl rand -hex 16` |
+| `WA_OFFLINE_MIN` | Tidak | Menit tanpa data sebelum dikabarkan offline (bawaan 5) |
+| `APP_URL` | Tidak | Tautan dashboard di pesan WA (di Vercel otomatis dari domain production) |
+| `WA_DRY_RUN` | Tidak | `1` = pesan hanya ditulis ke log server, tidak dikirim |
+
+Jangan commit `.env.local` atau `config.h`. Untuk mengganti rahasia (password DB, token Fonnte, `CRON_SECRET`, key node), ubah di sumbernya lalu perbarui env di Vercel dan `config.h` di firmware.
+
+#### Deploy ke Vercel
 
 1. Import repo dan set *Root Directory* = `web`.
-2. Isi environment variables `DATABASE_URL`, `DASHBOARD_USER`, `DASHBOARD_PASSWORD`.
+2. Isi environment variables di atas (minimal `DATABASE_URL`, `DASHBOARD_USER`, `DASHBOARD_PASSWORD`).
 3. Deploy. URL hasil deploy menjadi `SERVER_URL` di firmware.
 
+<<<<<<< HEAD
 **Notifikasi Telegram (opsional):**
+=======
+`web/scripts/vercel-setup.sh` mendorong variabel dari `.env.local` ke Vercel lalu deploy ke production. Region fungsi diatur ke `sin1` (Singapura) di `web/vercel.json`.
+
+Nama file di Vercel (Linux) peka huruf besar/kecil. Import `./Charts` tidak sama dengan `./charts`.
+
+#### Tambah node baru
+
+Dari halaman awal dashboard: **Tambah node**, isi id (huruf kecil, angka, `-`, 2–32 karakter) dan nama. API key dibuat otomatis dan **hanya ditampilkan sekali**, jadi salin langsung ke `DEVICE_KEY` di firmware node tersebut. Firmware untuk semua node sama; hanya `DEVICE_ID` dan `DEVICE_KEY` yang berbeda.
+
+### 3. Notifikasi WhatsApp (opsional, Fonnte)
+>>>>>>> e1af325c1a67d62689430674d082d2c6ae9e91c0
 
 1. Buat bot lewat [@BotFather](https://t.me/BotFather) (`/newbot`), lalu salin tokennya.
 2. Isi env `TELEGRAM_BOT_TOKEN` (di `.env.local` dan di Vercel; jangan di-commit). Jalankan `database/notifications.sql` jika belum.
@@ -110,7 +198,7 @@ npm run dev                    # http://localhost:3000
 4. Atur per node lewat tombol 🔔 di navigasi dashboard node: tekan *Cari chat ID* untuk memilih chat yang baru mengirim pesan ke bot, pilih jenis pesan yang dikirim, lalu *Kirim pesan uji*. Chat ID yang dikosongkan memakai env `TELEGRAM_CHAT_ID` (opsional, tujuan bawaan untuk semua node, pisah koma). Token bot tetap satu untuk seluruh web.
 5. Untuk peringatan *node offline*, isi `CRON_SECRET` (string acak) lalu buat job di [cron-job.org](https://cron-job.org) tiap 5 menit:
    `GET https://<domain>/api/cron/offline` dengan header `Authorization: Bearer <CRON_SECRET>`.
-   (Node yang offline tidak mengirim apa-apa, jadi perlu pemicu dari luar; cron Vercel Hobby hanya sekali sehari.)
+   Node yang offline tidak mengirim apa-apa, jadi perlu pemicu dari luar; cron Vercel Hobby hanya sekali sehari.
 
 Semua jenis aktif secara bawaan; tiap jenis bisa dimatikan per node.
 
@@ -120,6 +208,7 @@ Semua jenis aktif secara bawaan; tiap jenis bisa dimatikan per node.
 | Pompa dihentikan pengaman | event `system safety` | 15 menit |
 | Sensor tidak terbaca | 2 reading berturut-turut tanpa nilai | 60 menit |
 | Restart karena brownout | event `system boot` | 30 menit |
+<<<<<<< HEAD
 | Node offline / online lagi | `/api/cron/offline` (setelah `NOTIFY_OFFLINE_MIN`, default 5 menit) / reading pertama setelahnya | sekali per kejadian |
 | Siram otomatis / Ventilasi otomatis (beserta alasannya, mis. suhu ≥ batas) | event pompa / tutup dengan trigger `auto` | tiap aksi; aksi dalam satu sync digabung jadi satu pesan |
 
@@ -149,8 +238,18 @@ Broker yang disarankan: **EMQX Cloud Serverless** (gratis permanen: 1 juta sessi
 4. Isi `MQTT_HOST` (+ akun device) di `config.h`, lalu upload ulang firmware.
 
 Kalau semua tersambung, pil di navigasi dashboard berubah jadi **Live · MQTT**. Tanpa env MQTT, dashboard kembali ke polling tiap 3 detik.
+=======
+| Node offline / online lagi | `/api/cron/offline` (setelah `WA_OFFLINE_MIN`, bawaan 5 menit) / reading pertama setelahnya | sekali per kejadian |
+| Siram otomatis / Ventilasi otomatis (beserta alasannya, mis. suhu ≥ batas) | event pompa / tutup dengan trigger `auto` | tiap aksi; aksi dalam satu sync digabung jadi satu pesan |
 
-**Uji tanpa hardware:**
+Pengaturan dari sisi pengguna: [docs/user-guide.md](docs/user-guide.md#notifikasi-whatsapp). Kalau pesan tidak terkirim: [docs/troubleshooting.md](docs/troubleshooting.md#whatsapp).
+
+Semua pesan (berhasil atau gagal) tercatat di tabel `notifications`. Untuk uji tanpa mengirim, isi `WA_DRY_RUN=1`: pesan hanya ditulis ke log server.
+>>>>>>> e1af325c1a67d62689430674d082d2c6ae9e91c0
+
+Fonnte adalah gerbang WhatsApp tidak resmi. Nomor pengirim bisa diblokir WhatsApp, jadi jangan gunakan nomor pribadi dan siapkan jalur cadangan (mis. telepon atau pesan langsung ke penanggung jawab).
+
+### 4. Uji tanpa hardware (simulator)
 
 ```bash
 node tools/simulate-esp32.mjs --url http://localhost:3000 --id gh-01 --key <api_key>
@@ -159,7 +258,7 @@ node tools/simulate-esp32.mjs --url http://localhost:3000 --id gh-01 --key <api_
   --mqtt-url mqtts://<host>:8883 --mqtt-user <akun device> --mqtt-pass <password>
 ```
 
-Data dari simulator adalah data buatan. Setelah selesai uji, hapus dengan:
+Simulator meniru protokol sync ESP32 (reading, event, perintah, aturan mode; lihat [docs/api.md](docs/api.md#post-apiingest-protokol-esp32)). Datanya buatan. Setelah selesai uji, hapus supaya grafik dan analitik tidak tercampur:
 
 ```sql
 delete from readings;
@@ -167,38 +266,42 @@ delete from actuator_events;
 delete from commands;
 ```
 
-## 3. Firmware ESP32
+### 5. Firmware ESP32
 
 1. Install board **esp32 by Espressif** lewat Board Manager.
-2. Install library berikut lewat Library Manager:
+2. Install library lewat Library Manager:
    - **DHT sensor library** (Adafruit) + **Adafruit Unified Sensor**
    - **ESP32Servo**
    - **ArduinoJson** (v7)
+<<<<<<< HEAD
    - **PubSubClient** (Nick O'Leary), untuk MQTT
 3. Salin `config.example.h` menjadi `config.h`, lalu isi WiFi, `SERVER_URL`, `DEVICE_ID`, dan `DEVICE_KEY`. Kosongkan `WIFI_SSID` untuk tes offline di breadboard. Untuk MQTT, isi juga `MQTT_HOST`, `MQTT_USER`, `MQTT_PASS` (kosongkan `MQTT_HOST` = MQTT nonaktif).
+=======
+3. Salin `firmware/smart_greenhouse/config.example.h` menjadi `config.h`, lalu isi WiFi, `SERVER_URL`, `DEVICE_ID`, dan `DEVICE_KEY`. `DEVICE_KEY` harus sama dengan `api_key` di tabel `devices`. Kosongkan `WIFI_SSID` untuk tes offline di breadboard.
+>>>>>>> e1af325c1a67d62689430674d082d2c6ae9e91c0
 4. Pilih board **ESP32 Dev Module**.
-5. **Cabut adaptor 5 V sebelum upload lewat USB.**
+5. Lepas daya 5 V dari adaptor sebelum upload lewat USB (lihat [docs/safety.md](docs/safety.md)).
+6. Buka Serial Monitor (115200, Newline) dan cek baris boot: alasan reset terakhir dan status WiFi.
 
-Skema lengkap: `docs/skema_wiring_esp32_greenhouse.png`
+WiFi harus 2,4 GHz (ESP32 tidak mendukung 5 GHz). `SERVER_URL` ditulis tanpa garis miring di akhir.
 
-| Pin | Komponen |
+Catat versi board package dan library yang dipakai saat firmware terakhir terbukti jalan, supaya orang lain bisa mereproduksi build. Tambahkan di tabel ini:
+
+| Komponen | Versi yang diuji |
 |---|---|
-| GPIO 34 | Soil moisture kapasitif (ADC1) |
-| GPIO 13 | DHT22 (pull-up 10 kΩ ke 3,3 V jika modul tidak punya) |
-| GPIO 14 | Relay IN → pompa |
-| GPIO 18 | Servo MG996R (daya dari rail 5 V, kapasitor 470–1000 µF) |
+| esp32 by Espressif | _isi_ |
+| DHT sensor library | _isi_ |
+| Adafruit Unified Sensor | _isi_ |
+| ESP32Servo | _isi_ |
+| ArduinoJson | _isi (harus v7)_ |
 
-**Perintah Serial Monitor** (115200, Newline):
+### Selanjutnya
 
-| Perintah | Fungsi |
-|---|---|
-| `status` | Semua nilai sensor & state |
-| `cal` | Rata-rata ADC tanah. Catat nilainya di udara (kering) dan di air (basah), lalu isi di dashboard → kartu *Tanaman* → tab *Kalibrasi alat* |
-| `pump 3000` | Pompa 3 detik (tes) · `stop` untuk mematikan |
-| `lid open` / `lid close` / `lid 100` | Tes servo |
+Rangkai alat dan jalankan urutan tes di [docs/hardware.md](docs/hardware.md#urutan-tes), lalu lihat cara memakai dashboard di [docs/user-guide.md](docs/user-guide.md). Kalau koneksi, upload, atau database bermasalah: [docs/troubleshooting.md](docs/troubleshooting.md).
 
-**Keselamatan yang sudah ada di firmware:**
+## Keselamatan
 
+<<<<<<< HEAD
 - **Pompa saat boot:** relay diset OFF sebelum pin dijadikan output. Kalau pompa tetap menyala saat boot, ubah `RELAY_ACTIVE_LOW`.
 - **Batas waktu pompa:** tiap kali menyala dibatasi timer hardware, dan maksimal mutlak 10 s walaupun loop tertahan.
 - **Stop rule:** jumlah dosis otomatis per jam dibatasi. Jika batas tercapai tapi tanah masih kering, muncul peringatan *Cek tangki air*.
@@ -236,3 +339,6 @@ Skema lengkap: `docs/skema_wiring_esp32_greenhouse.png`
 | POST | `/api/devices/:id/preset` | Terapkan preset tanaman `{preset_id}` ke node |
 | GET / POST | `/api/presets` | Daftar preset / buat preset custom |
 | PUT / DELETE | `/api/presets/:pid` | Ubah / hapus preset custom (bawaan hanya-baca) |
+=======
+Pompa dibatasi 10 detik per nyala, dosis per jam dibatasi, dan penyiraman berhenti bila sensor tidak valid; semuanya di firmware, jadi tetap berlaku saat offline. Rangkaian bertegangan rendah (5 V), tetapi air, adaptor, dan servo tetap perlu hati-hati. Baca [docs/safety.md](docs/safety.md) sebelum merangkai, dan **ganti `api_key` bawaan serta isi `DASHBOARD_USER`/`DASHBOARD_PASSWORD`** sebelum alat tersambung ke internet.
+>>>>>>> e1af325c1a67d62689430674d082d2c6ae9e91c0
