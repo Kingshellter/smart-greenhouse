@@ -11,6 +11,8 @@ Cari gejalanya, lalu ikuti pemeriksaan dari atas ke bawah. Info dasar selalu ter
 | Pompa menyala saat boot / terbalik | Logika relay terbalik | Ubah `RELAY_ACTIVE_LOW` di `config.h` (`true`/`false`) |
 | Pompa langsung menyala saat daya dicolok, relay tidak aktif | Kabel merah pompa ada di terminal NC | Cabut daya, pindahkan ke terminal NO |
 | ESP32 restart saat servo atau pompa bergerak (boot log: `BROWNOUT`) | Daya kurang atau lonjakan arus | Cek kapasitor 470–1000 µF dekat servo; kabel merah servo ke titik 5 V (bukan ke ESP32); sumber ≥ 2 A; jangan memakai USB laptop untuk beban |
+| ESP32 restart berulang (tiap 10–30 s) selama tutup di posisi maintenance | Sudut maintenance melewati batas mekanis: servo terus mendorong (mentok) dan menarik arus besar | Kurangi sudut *Maintenance* di popup *Servo tutup* (mis. 180° → 165°) sampai servo tidak berdengung saat diam. Firmware menurunkan 10° sendiri setelah brownout, tapi kalibrasi tetap perlu |
+| Upload gagal `Invalid head of packet` / `serial noise` | Gangguan listrik di jalur USB saat upload cepat | Turunkan *Tools → Upload Speed* ke 115200; cabut adaptor pompa dan kabel daya servo selama upload |
 | Servo bergetar atau melorot sendiri | Sinyal PWM dilepas, daya lemah, atau horn longgar | Jangan men-*detach* servo (sengaja tidak dilakukan di firmware); cek daya dan kencangkan horn |
 | Tutup tidak mencapai posisi yang benar | Sudut belum dikalibrasi | Atur sudut Tertutup/Terbuka/Maintenance di bar perangkat → *Servo tutup* → kalibrasi (±1°/±5°) |
 | Nilai tanah tidak masuk akal / sensor tanah tidak terbaca | Kabel sensor lepas, sensor resistif, atau belum dikalibrasi | Cek kabel ke GPIO 34; jalankan `cal` di udara dan di air, isi dashboard. Nilai ADC di luar 100–4000 dianggap sensor lepas/korslet |

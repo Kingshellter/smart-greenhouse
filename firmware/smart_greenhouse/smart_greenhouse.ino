@@ -259,6 +259,21 @@ void updateServo() {
   // Sinyal tetap aktif menahan posisi (juga mencegah tutup melorot karena beratnya sendiri).
 }
 
+// Restart karena brownout saat tutup diangkat (maintenance): biasanya servo menahan di luar jangkauan
+// mekanisnya (mentok) dan terus menarik arus besar, lalu ESP32 restart berulang. Turunkan 10° ke arah
+// tertutup, tapi tidak melewati posisi "terbuka": tutup tetap terangkat (bisa ada tangan di dalam kotak).
+// Perbaikan sebenarnya: kurangi sudut maintenance di web (popup Servo tutup) dan perkuat catu daya.
+void brownoutBackoff() {
+  int dir = S.lidClosedDeg > servoPos ? 1 : -1;
+  int target = servoPos + dir * 10;
+  if ((dir < 0 && target < S.lidOpenDeg) || (dir > 0 && target > S.lidOpenDeg)) target = S.lidOpenDeg;
+  target = clampLid(target);
+  if (target == servoPos) return;
+  Serial.printf("[safety] brownout saat maintenance: servo %d° → %d°. Kurangi sudut maintenance di web.\n", servoPos, target);
+  servoGoTo(target);
+  logEvent("lid", "maintenance", target, "safety", "brownout backoff");
+}
+
 void setLid(LidPos p, const char* trigger) {
   int target = lidAngle(p);
   bool changed = (p != lidPos) || (clampLid(target) != servoTarget);
@@ -363,13 +378,16 @@ void applySettings(JsonObjectConst o) {
   if (lidAnglesChanged) servoGoTo(lidAngle(lidPos));   // kalibrasi: servo ikut sudut baru
 }
 
-// Perintah bisa datang dua kali (MQTT seketika + HTTP sync sebagai cadangan): id yang sudah dijalankan dilewati.
-long doneCmds[16] = {0};
-int doneCmdN = 0;
+// Perintah bisa datang dua kali (MQTT seketika + HTTP sync sebagai cadangan), dan setelah restart HTTP bisa
+// mengantar ulang perintah yang sudah dijalankan lewat MQTT. Id perintah di database selalu naik, jadi id
+// terbesar yang sudah dijalankan disimpan di NVS: id yang sama atau lebih lama dilewati (yang terbaru berlaku).
+int32_t lastCmdId = 0;   // dimuat dari NVS di setup()
 bool commandSeen(long id) {
   if (id <= 0) return false;
-  for (long d : doneCmds) if (d == id) return true;
-  doneCmds[doneCmdN++ % 16] = id;
+  // Selisih sangat besar = database baru (id mulai dari 1 lagi): terima dan mulai hitung ulang.
+  if (id <= lastCmdId && lastCmdId - id < 100000) return true;
+  lastCmdId = id;
+  prefs.putInt("cmd", lastCmdId);
   return false;
 }
 
@@ -608,6 +626,7 @@ void setup() {
 
   prefs.begin("greenhouse", false);
   loadSettings();
+  lastCmdId = prefs.getInt("cmd", 0);
 
   analogReadResolution(12);
   dht.begin();
@@ -615,6 +634,7 @@ void setup() {
   ESP32PWM::allocateTimer(0);
   if (!restoreLidState()) setLid(LID_CLOSED, "boot");   // pertama kali: tertutup
   logEvent("system", "boot", (float)rr, "boot", rr == ESP_RST_BROWNOUT ? "brownout" : nullptr);
+  if (rr == ESP_RST_BROWNOUT && lidPos == LID_MAINT) brownoutBackoff();
 
   if (netEnabled) {
     WiFi.mode(WIFI_STA);

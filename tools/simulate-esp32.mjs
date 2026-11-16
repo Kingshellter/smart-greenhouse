@@ -96,13 +96,13 @@ function applySettings(s) {
   S = { ...S, ...s };
 }
 
-// Perintah bisa datang dua kali (MQTT + HTTP): id yang sudah dijalankan dilewati, sama dengan firmware.
-const doneCmds = [];
+// Perintah bisa datang dua kali (MQTT + HTTP): id yang sama atau lebih lama dari yang terakhir dijalankan
+// dilewati, sama dengan commandSeen() di firmware (di sana disimpan di NVS supaya tahan restart).
+let lastCmdId = 0;
 function runCommand(c) {
   if (c.id > 0) {
-    if (doneCmds.includes(c.id)) return;
-    doneCmds.push(c.id);
-    if (doneCmds.length > 16) doneCmds.shift();
+    if (c.id <= lastCmdId && lastCmdId - c.id < 100000) return;
+    lastCmdId = c.id;
   }
   console.log(`[cmd] ${c.type} ${JSON.stringify(c.payload)}`);
   const pos = c.payload?.position;

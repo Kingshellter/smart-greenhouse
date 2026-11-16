@@ -110,7 +110,7 @@ Opsional, aktif kalau env `MQTT_URL`/`MQTT_WS_URL` dan `MQTT_HOST` di firmware d
 |---|---|---|
 | `<prefix>/<id>/state` | ESP32 → broker → dashboard | Field sama dengan `reading` di `/api/ingest` (JSON, retained), tapi `lid_angle` adalah posisi servo saat itu. Perubahan aktuator dikirim seketika (juga saat pompa menyala dan servo bergerak), perubahan sensor paling cepat tiap 2 s, heartbeat tiap 10 s |
 | `<prefix>/<id>/status` | ESP32 → broker | `online` / `offline` (LWT: broker menulis `offline` sendiri kalau ESP32 hilang), retained |
-| `<prefix>/<id>/cmd` | server → ESP32 | `{id, type, payload}` begitu `POST /commands` diterima. HTTP sync tetap mengantarkannya sebagai cadangan; ESP32 melewati id yang sudah dijalankan |
+| `<prefix>/<id>/cmd` | server → ESP32 | `{id, type, payload}` begitu `POST /commands` diterima. HTTP sync tetap mengantarkannya sebagai cadangan; ESP32 melewati id yang sama atau lebih lama dari id terakhir yang dijalankan (disimpan di NVS, jadi tetap berlaku setelah restart) |
 | `<prefix>/<id>/settings` | server → ESP32 | Setting lengkap (sama dengan balasan `/api/ingest`), retained, begitu `PUT /settings` atau `POST /preset` disimpan |
 
 Vercel (serverless) tidak bisa terus tersambung ke broker, jadi server hanya *publish* (sambung → kirim → putus). Dashboard berlangganan `state` dan `status` lewat WebSocket memakai akun dari `/api/mqtt/config`; pesan *retained* diabaikan karena umurnya tidak diketahui, dan data dianggap live selama 25 detik sejak pesan terakhir. Aturan mode tetap berlaku: server menolak perintah di mode otomatis, dan firmware juga memeriksanya sendiri.
