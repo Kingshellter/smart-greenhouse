@@ -21,7 +21,8 @@ add APP_TZ "Asia/Jakarta"
 add DASHBOARD_USER "$USER_NAME"
 add DASHBOARD_PASSWORD "$PASS"
 # Notifikasi Telegram (opsional): ikut dikirim hanya jika terisi di .env.local
-for k in TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID CRON_SECRET NOTIFY_OFFLINE_MIN; do
+for k in TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID CRON_SECRET NOTIFY_OFFLINE_MIN \
+         MQTT_URL MQTT_SERVER_USER MQTT_SERVER_PASS MQTT_WS_URL MQTT_VIEW_USER MQTT_VIEW_PASS MQTT_TOPIC_PREFIX; do
   v=$(grep "^$k=" .env.local | cut -d= -f2- || true)
   if [ -n "$v" ]; then add "$k" "$v"; fi
 done

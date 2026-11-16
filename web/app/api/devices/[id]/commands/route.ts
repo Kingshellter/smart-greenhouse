@@ -3,11 +3,14 @@
 //   { type: "lid", payload: { position: "open" | "closed" | "maintenance" | "exit_maintenance" } }
 // Mode manual: semua perintah. Mode otomatis: semua terkunci, kecuali masuk/keluar maintenance
 // (sama dengan runCommand() di firmware: maintenance boleh di mode apa pun).
-// ESP32 mengambilnya pada sync berikutnya;
-// perintah yang tidak terambil dalam 60 s kedaluwarsa.
+// Kalau MQTT aktif, perintah juga langsung dikirim ke topik <prefix>/<id>/cmd (ESP32 menjalankannya
+// seketika). ESP32 tetap mengambilnya pada sync berikutnya sebagai cadangan, dan melewati id yang
+// sudah dijalankan. Perintah yang tidak terambil dalam 60 s kedaluwarsa.
 
+import { after } from "next/server";
 import { sql } from "@/lib/db";
 import { bad, num, readJson } from "@/lib/http";
+import { mqttPublish, mqttServerEnabled, topic } from "@/lib/mqtt";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -39,5 +42,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const [cmd] = await sql`
     insert into commands (device_id, type, payload) values (${id}, ${b.type as string}, ${sql.json(payload as never)})
     returning id::int as id, type, payload, status, created_at`;
+  if (mqttServerEnabled())
+    after(() => mqttPublish([{ topic: topic(id, "cmd"), payload: { id: cmd.id, type: cmd.type, payload: cmd.payload } }]));
   return Response.json(cmd, { status: 201 });
 }

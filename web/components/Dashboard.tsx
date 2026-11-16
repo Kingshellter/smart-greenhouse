@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ago, api, prefetch, usePoll } from "@/lib/client";
+import { liveFresh, mergeLive, useLive } from "@/lib/live";
 import type { ActuatorEvent, DeviceState } from "@/lib/types";
 import { SERVO_DEG_PER_S, type Settings } from "@/lib/settings";
 import type { Preset, PresetValues } from "@/lib/presets";
@@ -33,7 +34,11 @@ const LID_MOVING: Record<Lid, string> = { closed: "Menutup…", open: "Membuka�
 
 export default function Dashboard({ id }: { id: string }) {
   const router = useRouter();
-  const { data, error, refresh } = usePoll<DeviceState>(`/api/devices/${id}/state`, 3000);
+  const { data: polled, error, refresh } = usePoll<DeviceState>(`/api/devices/${id}/state`, 3000);
+  // MQTT (opsional): state live dari ESP32 menimpa hasil polling selama masih baru.
+  const live = useLive(id);
+  const data = useMemo(() => mergeLive(polled, live), [polled, live]);
+  const isLive = liveFresh(live);
   const { data: recent } = usePoll<ActuatorEvent[]>(`/api/devices/${id}/events?limit=5`, 3000);
   const [inflight, setInflight] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending>({ since: 0 });
@@ -64,9 +69,20 @@ export default function Dashboard({ id }: { id: string }) {
     if (lastPumpEvent.current === null) { lastPumpEvent.current = ev.id; return; } // event lama saat halaman dibuka
     if (ev.id === lastPumpEvent.current) return;
     lastPumpEvent.current = ev.id;
-    if (Date.now() - manualPumpAt.current < 30_000) return; // sudah dianimasikan saat tombol ditekan
+    if (Date.now() - manualPumpAt.current < 30_000) return; // sudah dianimasikan saat tombol ditekan / dari MQTT
     playPump(ev.value ?? 3000);
   }, [recent]);
+  // Lewat MQTT, ESP32 melaporkan pompa menyala/mati saat itu juga: animasi mengikuti status aslinya.
+  const livePump = live.reading?.pump_state;
+  useEffect(() => {
+    if (livePump === "on") {
+      manualPumpAt.current = Date.now(); // jangan diputar ulang saat event "pump run" masuk
+      playPump(10_000);
+    } else if (livePump === "off" && Date.now() - manualPumpAt.current < 15_000) {
+      if (pumpTimer.current) clearTimeout(pumpTimer.current);
+      setPumpAnim(false);
+    }
+  }, [livePump]); // eslint-disable-line react-hooks/exhaustive-deps -- playPump stabil secara perilaku
   useEffect(() => () => {
     if (pumpTimer.current) clearTimeout(pumpTimer.current);
   }, []);
@@ -221,8 +237,9 @@ export default function Dashboard({ id }: { id: string }) {
         <div className="nav-right">
           <code className="node-id">{device.id.toUpperCase()}</code>
           <NotifySettings id={id} notify={flash} />
-          <span className={`live ${device.online ? "on" : ""}`}>
-            <i />{device.online ? `Live · ${ago(r?.ts)}` : `Offline · ${ago(device.last_seen)}`}
+          <span className={`live ${device.online ? "on" : ""}`}
+                title={isLive ? "Data langsung dari ESP32 lewat MQTT" : live.connected ? "MQTT tersambung, menunggu ESP32" : "Data dari server (diperbarui tiap 3 detik)"}>
+            <i />{device.online ? (isLive ? "Live · MQTT" : `Live · ${ago(r?.ts)}`) : `Offline · ${ago(device.last_seen)}`}
           </span>
         </div>
       </nav>

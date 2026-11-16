@@ -4,6 +4,10 @@
 // JANGAN dipakai untuk data presentasi: datanya buatan.
 //
 //   node tools/simulate-esp32.mjs --url http://localhost:3000 --id gh-01 --key ganti-dengan-key-rahasia
+// MQTT (opsional, sama dengan firmware): tambahkan
+//   --mqtt-url mqtts://<host>:8883 --mqtt-user <akun device> --mqtt-pass <password> [--mqtt-prefix greenhouse]
+
+import { createRequire } from "node:module";
 
 const arg = (name, def) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -12,6 +16,8 @@ const arg = (name, def) => {
 const URL_ = arg("url", "http://localhost:3000");
 const ID = arg("id", "gh-01");
 const KEY = arg("key", "ganti-dengan-key-rahasia");
+const MQTT_URL = arg("mqtt-url", "");
+const MQTT_BASE = `${arg("mqtt-prefix", "greenhouse")}/${ID}/`;
 
 // setting default = default firmware, ditimpa oleh balasan server
 let S = { mode: "auto", soil_dry_pct: 35, dose_ms: 3000, soak_s: 60, max_doses_per_hour: 6,
@@ -75,19 +81,45 @@ function auto() {
   startPump(S.dose_ms, "auto");
 }
 
+const r1 = (x) => Math.round(x * 10) / 10;
+// Isi reading, sama untuk /api/ingest dan topik MQTT state (seperti fillReading() di firmware)
+const reading = () => ({
+  soil_raw: Math.round(S.soil_raw_dry - (soilPct / 100) * (S.soil_raw_dry - S.soil_raw_wet)),
+  soil_pct: r1(soilPct), temperature_c: r1(temp), humidity_pct: r1(hum),
+  lid_state: lidPos, lid_angle: angle(lidPos),
+  pump_state: pumpOn ? "on" : "off", mode: S.mode, tank_warning: tankWarning,
+});
+
+function applySettings(s) {
+  if (!s) return;
+  if (s.mode && s.mode !== S.mode) log("mode", s.mode, 0, "web");
+  S = { ...S, ...s };
+}
+
+// Perintah bisa datang dua kali (MQTT + HTTP): id yang sudah dijalankan dilewati, sama dengan firmware.
+const doneCmds = [];
+function runCommand(c) {
+  if (c.id > 0) {
+    if (doneCmds.includes(c.id)) return;
+    doneCmds.push(c.id);
+    if (doneCmds.length > 16) doneCmds.shift();
+  }
+  console.log(`[cmd] ${c.type} ${JSON.stringify(c.payload)}`);
+  const pos = c.payload?.position;
+  if (c.type === "lid" && pos === "maintenance") return setLid("maintenance", "web");
+  if (c.type === "lid" && pos === "exit_maintenance") { if (lidPos === "maintenance") setLid("closed", "web"); return; }
+  if (S.mode !== "manual") return;
+  if (c.type === "pump_dose") startPump(c.payload.ms ?? S.dose_ms, "web");
+  if (c.type === "lid" && (pos === "open" || pos === "closed")) setLid(pos, "web");
+}
+
 async function sync() {
   const now = Date.now();
   const sendReading = stateChanged || now - lastReport >= S.report_interval_s * 1000;
   const sent = events.length;
-  const r1 = (x) => Math.round(x * 10) / 10;
   const body = {
     device_id: ID,
-    reading: sendReading ? {
-      soil_raw: Math.round(S.soil_raw_dry - (soilPct / 100) * (S.soil_raw_dry - S.soil_raw_wet)),
-      soil_pct: r1(soilPct), temperature_c: r1(temp), humidity_pct: r1(hum),
-      lid_state: lidPos, lid_angle: angle(lidPos),
-      pump_state: pumpOn ? "on" : "off", mode: S.mode, tank_warning: tankWarning, rssi: -55 - Math.round(Math.random() * 10),
-    } : undefined,
+    reading: sendReading ? { ...reading(), rssi: -55 - Math.round(Math.random() * 10) } : undefined,
     events: events.map((e) => ({ actuator: e.actuator, action: e.action, value: e.value, trigger: e.trigger,
       age_ms: now - e.at, ...(e.reason ? { detail: { reason: e.reason } } : {}) })),
   };
@@ -99,25 +131,50 @@ async function sync() {
     if (!res.ok) return console.error(`[net] ${res.status} ${data.error}`);
     events = events.slice(sent);
     if (sendReading) { lastReport = now; stateChanged = false; }
-    if (data.settings) {
-      if (data.settings.mode !== S.mode) log("mode", data.settings.mode, 0, "web");
-      S = { ...S, ...data.settings };
-    }
-    for (const c of data.commands ?? []) {
-      console.log(`[cmd] ${c.type} ${JSON.stringify(c.payload)}`);
-      const pos = c.payload?.position;
-      if (c.type === "lid" && pos === "maintenance") { setLid("maintenance", "web"); continue; }
-      if (c.type === "lid" && pos === "exit_maintenance") { if (lidPos === "maintenance") setLid("closed", "web"); continue; }
-      if (S.mode !== "manual") continue;
-      if (c.type === "pump_dose") startPump(c.payload.ms ?? S.dose_ms, "web");
-      if (c.type === "lid" && (pos === "open" || pos === "closed")) setLid(pos, "web");
-    }
+    applySettings(data.settings);
+    for (const c of data.commands ?? []) runCommand(c);
   } catch (e) {
     console.error(`[net] ${e.message}`);
   }
 }
 
+// ── MQTT (opsional) ─────────────────────────────────────────────────────────
+let mqttClient = null, lastStateSent = "", lastStatePub = 0;
+if (MQTT_URL) {
+  // mqtt dipasang di web/node_modules (simulator dijalankan dari web/ lewat `npm run simulate`)
+  const require = createRequire(new URL("../web/package.json", import.meta.url));
+  const mqtt = require("mqtt");
+  mqttClient = mqtt.connect(MQTT_URL, {
+    username: arg("mqtt-user", undefined), password: arg("mqtt-pass", undefined),
+    clientId: `gh-sim-${ID}-${Math.random().toString(16).slice(2, 8)}`,
+    will: { topic: MQTT_BASE + "status", payload: "offline", qos: 1, retain: true },
+    reconnectPeriod: 5000,
+  });
+  mqttClient.on("connect", () => {
+    console.log(`[mqtt] terhubung → ${MQTT_URL} (${MQTT_BASE}*)`);
+    mqttClient.publish(MQTT_BASE + "status", "online", { qos: 1, retain: true });
+    mqttClient.subscribe([MQTT_BASE + "cmd", MQTT_BASE + "settings"], { qos: 1 });
+    lastStateSent = "";
+  });
+  mqttClient.on("error", (e) => console.error(`[mqtt] ${e.message}`));
+  mqttClient.on("message", (topic, buf) => {
+    let msg;
+    try { msg = JSON.parse(buf.toString()); } catch { return; }
+    if (topic.endsWith("/settings")) applySettings(msg);
+    else if (topic.endsWith("/cmd")) runCommand(msg);
+  });
+}
+// Kirim state saat berubah dan minimal tiap 3 s (seperti publishState() di firmware)
+function publishState() {
+  if (!mqttClient?.connected) return;
+  const cmp = JSON.stringify(reading());
+  if (cmp === lastStateSent && Date.now() - lastStatePub < 3000) return;
+  mqttClient.publish(MQTT_BASE + "state", JSON.stringify({ ...JSON.parse(cmp), rssi: -55 - Math.round(Math.random() * 10) }), { retain: true });
+  lastStateSent = cmp;
+  lastStatePub = Date.now();
+}
+
 log("system", "boot", 0, "boot");
-console.log(`Simulator ${ID} → ${URL_}`);
-setInterval(() => { physics(); auto(); }, 1000);
+console.log(`Simulator ${ID} → ${URL_}${MQTT_URL ? ` + MQTT ${MQTT_URL}` : ""}`);
+setInterval(() => { physics(); auto(); publishState(); }, 1000);
 setInterval(() => { if (!pumpOn) sync(); }, 3000);

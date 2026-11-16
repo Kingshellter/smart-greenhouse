@@ -11,6 +11,7 @@
     - DHT sensor library (Adafruit) + Adafruit Unified Sensor
     - ESP32Servo (Kevin Harrington)
     - ArduinoJson (Benoit Blanchon) v7
+    - PubSubClient (Nick O'Leary) — MQTT, hanya dipakai kalau MQTT_HOST diisi di config.h
   Board: "ESP32 Dev Module" (esp32 by Espressif).
 
   Alur:
@@ -18,6 +19,9 @@
     - Mode otomatis: tanah < ambang → pompa 1 dosis → tunggu meresap → baca ulang.
       Dosis per jam dibatasi (stop rule). Suhu/RH tinggi → tutup dibuka (hysteresis).
     - Tiap ~3 s ESP32 POST ke /api/ingest; balasan berisi setting terbaru + perintah web.
+    - MQTT (opsional): state live ke <prefix>/<id>/state, status online/offline (LWT),
+      perintah dari <prefix>/<id>/cmd dan setting dari <prefix>/<id>/settings seketika.
+      HTTP tetap jalan sebagai penyimpan data dan cadangan; perintah yang sama tidak dijalankan dua kali.
     - Semua logika keselamatan jalan lokal, tetap bekerja walau WiFi putus.
 */
 
@@ -28,9 +32,27 @@
 #include <ArduinoJson.h>
 #include <DHT.h>
 #include <ESP32Servo.h>
+#include <PubSubClient.h>
 #include "esp_timer.h"
 #include "esp_system.h"
 #include "config.h"
+
+// MQTT opsional: config.h lama (tanpa baris MQTT) tetap bisa di-compile, MQTT nonaktif.
+#ifndef MQTT_HOST
+#define MQTT_HOST ""
+#endif
+#ifndef MQTT_PORT
+#define MQTT_PORT 8883
+#endif
+#ifndef MQTT_USER
+#define MQTT_USER ""
+#endif
+#ifndef MQTT_PASS
+#define MQTT_PASS ""
+#endif
+#ifndef MQTT_TOPIC_PREFIX
+#define MQTT_TOPIC_PREFIX "greenhouse"
+#endif
 
 // ───────────────────────── Pin & konstanta tetap ─────────────────────────
 constexpr int PIN_SOIL  = 34;
@@ -40,6 +62,9 @@ constexpr int PIN_SERVO = 18;
 
 constexpr uint32_t PUMP_HARD_MAX_MS  = 10000;  // batas mutlak 1x pompa menyala, tidak bisa diubah dari web
 constexpr uint32_t POLL_INTERVAL_MS  = 3000;   // sync ke server (ambil perintah)
+constexpr uint32_t MQTT_RETRY_MS     = 10000;  // jeda sambung ulang broker (connect TLS bisa memblokir 1–3 s)
+constexpr uint32_t MQTT_CHECK_MS     = 250;    // seberapa sering state dicek untuk dikirim
+constexpr uint32_t MQTT_STATE_MS     = 3000;   // state tetap dikirim minimal sekian ms walau tidak berubah
 constexpr uint32_t DHT_INTERVAL_MS   = 2500;   // DHT22 maks 1x per 2 detik
 constexpr uint32_t SOIL_INTERVAL_MS  = 1000;
 constexpr uint32_t SERVO_HOLD_MS     = 600;    // jeda setelah sampai sebelum HTTP boleh jalan lagi (servo TIDAK di-detach)
@@ -336,7 +361,18 @@ void applySettings(JsonObjectConst o) {
   if (lidAnglesChanged) servoGoTo(lidAngle(lidPos));   // kalibrasi: servo ikut sudut baru
 }
 
+// Perintah bisa datang dua kali (MQTT seketika + HTTP sync sebagai cadangan): id yang sudah dijalankan dilewati.
+long doneCmds[16] = {0};
+int doneCmdN = 0;
+bool commandSeen(long id) {
+  if (id <= 0) return false;
+  for (long d : doneCmds) if (d == id) return true;
+  doneCmds[doneCmdN++ % 16] = id;
+  return false;
+}
+
 void runCommand(JsonObjectConst c) {
+  if (commandSeen(c["id"] | 0L)) return;
   const char* type = c["type"] | "";
   const char* pos = c["payload"]["position"] | "";
   // Maintenance boleh di mode apa pun
@@ -364,6 +400,20 @@ void addNum(JsonObject o, const char* key, float v, bool valid = true) {
   else o[key] = nullptr;
 }
 
+// Isi reading, sama untuk /api/ingest dan topik MQTT state. `liveAngle` = sudut servo saat ini (MQTT,
+// supaya tutup di dashboard ikut bergerak); HTTP menyimpan sudut tujuan.
+void fillReading(JsonObject r, bool liveAngle) {
+  if (soilRaw >= 0) r["soil_raw"] = soilRaw; else r["soil_raw"] = nullptr;
+  addNum(r, "soil_pct", soilPct, soilValid);
+  addNum(r, "temperature_c", tempC, dhtValid);
+  addNum(r, "humidity_pct", humPct, dhtValid);
+  r["lid_state"] = lidName(lidPos);
+  r["lid_angle"] = liveAngle ? servoPos : servoTarget;
+  r["pump_state"] = pumpOn ? "on" : "off";
+  r["mode"] = S.manual ? "manual" : "auto";
+  r["tank_warning"] = tankWarning;
+}
+
 void syncCloud() {
   if (!netEnabled || WiFi.status() != WL_CONNECTED) return;
 
@@ -374,15 +424,7 @@ void syncCloud() {
   doc["device_id"] = DEVICE_ID;
   if (sendReading) {
     JsonObject r = doc["reading"].to<JsonObject>();
-    if (soilRaw >= 0) r["soil_raw"] = soilRaw; else r["soil_raw"] = nullptr;
-    addNum(r, "soil_pct", soilPct, soilValid);
-    addNum(r, "temperature_c", tempC, dhtValid);
-    addNum(r, "humidity_pct", humPct, dhtValid);
-    r["lid_state"] = lidName(lidPos);
-    r["lid_angle"] = servoTarget;
-    r["pump_state"] = pumpOn ? "on" : "off";
-    r["mode"] = S.manual ? "manual" : "auto";
-    r["tank_warning"] = tankWarning;
+    fillReading(r, false);
     r["rssi"] = WiFi.RSSI();
   }
   int sentEvents = evN;
@@ -431,6 +473,59 @@ void syncCloud() {
   http.end();
 }
 
+// ───────────────────────── MQTT (opsional) ─────────────────────────
+// Broker terpisah dari server web. Putus/gagal tidak mengganggu apa pun: HTTP sync tetap jalan.
+WiFiClientSecure mqttTls;
+PubSubClient mqtt(mqttTls);
+const bool mqttEnabled = netEnabled && strlen(MQTT_HOST) > 0;
+const String mqttBase = String(MQTT_TOPIC_PREFIX) + "/" + DEVICE_ID + "/";
+uint32_t lastMqttTry = 0, lastStateCheck = 0, lastStatePub = 0;
+String lastStateSent;   // state terakhir yang dikirim (tanpa rssi), untuk deteksi perubahan
+
+void onMqttMessage(char* topic, byte* payload, unsigned int len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, (const char*)payload, len)) return;
+  String t(topic);
+  if (t.endsWith("/settings")) applySettings(doc.as<JsonObjectConst>());
+  else if (t.endsWith("/cmd")) runCommand(doc.as<JsonObjectConst>());
+}
+
+void ensureMqtt() {
+  if (!mqttEnabled || WiFi.status() != WL_CONNECTED) return;
+  if (mqtt.connected()) { mqtt.loop(); return; }
+  // Connect TLS memblokir loop sebentar: jangan saat pompa menyala / servo bergerak.
+  if (pumpOn || servoMoving() || millis() - lastMqttTry < MQTT_RETRY_MS) return;
+  lastMqttTry = millis();
+  String cid = String("gh-") + DEVICE_ID + "-" + String((uint32_t)ESP.getEfuseMac(), HEX);
+  String status = mqttBase + "status";
+  bool ok = mqtt.connect(cid.c_str(),
+                         strlen(MQTT_USER) ? MQTT_USER : nullptr, strlen(MQTT_PASS) ? MQTT_PASS : nullptr,
+                         status.c_str(), 1, true, "offline");   // LWT: broker menulis "offline" kalau ESP32 hilang
+  if (!ok) { Serial.printf("[mqtt] gagal terhubung (state %d)\n", mqtt.state()); return; }
+  Serial.println("[mqtt] terhubung ✓");
+  mqtt.publish(status.c_str(), "online", true);
+  mqtt.subscribe((mqttBase + "cmd").c_str(), 1);
+  mqtt.subscribe((mqttBase + "settings").c_str(), 1);
+  lastStateSent = "";   // kirim state segera
+}
+
+// Kirim state saat berubah (dicek tiap 250 ms) dan minimal tiap 3 s. Juga jalan saat pompa menyala,
+// jadi dashboard melihat pompa on/off dan tutup bergerak secara langsung.
+void publishState() {
+  if (!mqtt.connected() || millis() - lastStateCheck < MQTT_CHECK_MS) return;
+  uint32_t now = lastStateCheck = millis();
+  JsonDocument doc;
+  JsonObject r = doc.to<JsonObject>();
+  fillReading(r, true);
+  String cmp;
+  serializeJson(doc, cmp);
+  if (cmp == lastStateSent && now - lastStatePub < MQTT_STATE_MS) return;
+  r["rssi"] = WiFi.RSSI();   // rssi selalu berubah, jadi tidak ikut deteksi perubahan
+  String body;
+  serializeJson(doc, body);
+  if (mqtt.publish((mqttBase + "state").c_str(), body.c_str(), true)) { lastStateSent = cmp; lastStatePub = now; }
+}
+
 void ensureWifi() {
   static uint32_t lastTry = 0;
   if (!netEnabled || WiFi.status() == WL_CONNECTED) return;
@@ -453,6 +548,9 @@ void printStatus() {
   Serial.printf("siram otomatis=%s\n", S.manual ? "mati (mode manual)" : autoPumpPaused ? "DIJEDA (auto off)" : "aktif");
   Serial.printf("wifi=%s rssi=%d queue=%d\n", WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "-", WiFi.RSSI(), evN);
   Serial.printf("server=%s | http terakhir=%d (%lu ms)\n", SERVER_URL, lastHttpCode, (unsigned long)lastHttpMs);
+  if (mqttEnabled) Serial.printf("mqtt=%s:%d %s (state %d) topik=%s*\n", MQTT_HOST, MQTT_PORT,
+                                 mqtt.connected() ? "terhubung" : "putus", mqtt.state(), mqttBase.c_str());
+  else Serial.println("mqtt=nonaktif (MQTT_HOST kosong)");
 }
 
 void handleSerial() {
@@ -514,6 +612,14 @@ void setup() {
   } else {
     Serial.println("[net] WIFI_SSID kosong → mode offline");
   }
+  if (mqttEnabled) {
+    mqttTls.setInsecure();              // prototipe: tanpa verifikasi sertifikat (sama dengan HTTP)
+    mqtt.setServer(MQTT_HOST, MQTT_PORT);
+    mqtt.setCallback(onMqttMessage);
+    mqtt.setBufferSize(1024);           // bawaan 256 byte terlalu kecil untuk pesan setting
+    mqtt.setKeepAlive(30);
+    mqtt.setSocketTimeout(5);
+  }
   readSoil();
   Serial.println("Ketik 'status' atau 'cal' di Serial Monitor (115200, Newline).");
 }
@@ -530,6 +636,8 @@ void loop() {
 
   autoControl();
   ensureWifi();
+  ensureMqtt();
+  publishState();
 
   // Jangan HTTP saat pompa/servo bergerak: request bisa memblokir loop beberapa detik.
   if (!pumpOn && !servoMoving() && now - lastPollMs >= POLL_INTERVAL_MS) {

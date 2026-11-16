@@ -1,8 +1,10 @@
 // POST /api/devices/:id/preset {preset_id} → salin nilai preset ke setting node.
-// ESP32 menerima threshold baru pada sync berikutnya, sama seperti PUT settings.
+// ESP32 menerima threshold baru pada sync berikutnya, sama seperti PUT settings (atau seketika lewat MQTT).
 
+import { after } from "next/server";
 import { sql } from "@/lib/db";
 import { bad, readJson } from "@/lib/http";
+import { mqttPublish, mqttServerEnabled, settingsPayload, topic } from "@/lib/mqtt";
 import { PRESET_FIELDS, type PresetValues } from "@/lib/presets";
 import { SETTINGS_COLUMNS, mergeSettings, type Settings } from "@/lib/settings";
 
@@ -30,5 +32,7 @@ export async function POST(req: Request, { params }: Ctx) {
     update device_settings set ${sql(next, SETTINGS_COLUMNS)}, preset_id = ${presetId}, updated_at = now()
     where device_id = ${id}
     returning ${sql(SETTINGS_COLUMNS)}, preset_id, updated_at`;
+  if (mqttServerEnabled())
+    after(() => mqttPublish([{ topic: topic(id, "settings"), payload: settingsPayload(saved), retain: true }]));
   return Response.json({ ...saved, preset_name: preset.name });
 }

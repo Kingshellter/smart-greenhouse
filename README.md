@@ -8,6 +8,11 @@ ESP32 ──HTTP POST /api/ingest (tiap 3 s)──▶ Next.js API ──▶ Post
    ▲                                         │
    └──── balasan: setting + perintah ◀───────┘
 Browser ◀── dashboard + analitik (Next.js) ──▶ /api/devices/...
+
+MQTT (opsional, real-time):
+ESP32 ──state + status (LWT)──▶ Broker MQTT ──WebSocket──▶ Browser (dashboard live)
+  ▲                               ▲
+  └──── perintah + setting ◀──────┴── publish dari Next.js API saat tombol ditekan
 ```
 
 | Folder | Isi |
@@ -56,6 +61,7 @@ Browser ◀── dashboard + analitik (Next.js) ──▶ /api/devices/...
 |---|---|---|
 | 2 | Bisa dikembangkan ke banyak node | Setiap data membawa `device_id`. Node baru ditambah lewat halaman awal → *Tambah node* (key dibuat otomatis); firmware cukup diganti `DEVICE_ID`/`DEVICE_KEY`, tanpa ubah kode |
 | 3 | Cloud & web milik sendiri | API Next.js + PostgreSQL buatan tim |
+| – | Protokol MQTT + dashboard real-time | ESP32 publish state ke broker (`<prefix>/<id>/state`, status online/offline lewat LWT) dan subscribe perintah/setting; dashboard berlangganan lewat WebSocket. Lihat bagian *MQTT* di bawah |
 | 4 | Semua data tersimpan + modul analitik | Tabel `readings`, `actuator_events`, `commands`. Kartu hotspot model 3D (grafik riwayat, min/rata/maks harian, grafik harian pompa & ventilasi) dan baris aktuator yang dibuka: frekuensi & durasi pompa, estimasi air, ventilasi dibuka, % waktu ventilasi terbuka, safety stop |
 
 ## 1. Database
@@ -119,10 +125,36 @@ Semua jenis aktif secara bawaan; tiap jenis bisa dimatikan per node.
 
 Semua pesan (berhasil atau gagal) tercatat di tabel `notifications`. Untuk uji tanpa mengirim, isi `NOTIFY_DRY_RUN=1`: pesan hanya ditulis ke log server.
 
+**MQTT (opsional, untuk dashboard real-time):**
+
+HTTP tetap jalan seperti biasa (penyimpanan data, analitik, notifikasi). MQTT menambahkan jalur langsung:
+
+| Topik | Arah | Isi |
+|---|---|---|
+| `<prefix>/<id>/state` | ESP32 → broker → dashboard | reading + state aktuator (JSON, retained), dikirim saat berubah dan minimal tiap 3 s, termasuk saat pompa menyala dan servo bergerak |
+| `<prefix>/<id>/status` | ESP32 → broker | `online` / `offline` (LWT: broker menulis `offline` sendiri kalau ESP32 hilang) |
+| `<prefix>/<id>/cmd` | server → ESP32 | perintah `{id, type, payload}` begitu tombol ditekan; ESP32 melewati id yang sudah dijalankan, karena HTTP sync tetap mengantarkannya sebagai cadangan |
+| `<prefix>/<id>/settings` | server → ESP32 | setting lengkap (retained) begitu disimpan |
+
+`<prefix>` bawaan `greenhouse`. Aturan mode tetap sama: server menolak perintah di mode otomatis, dan firmware juga memeriksanya sendiri.
+
+1. Buat cluster gratis di [HiveMQ Cloud](https://console.hivemq.cloud) (Serverless). Catat host-nya (`xxxx.s1.eu.hivemq.cloud`).
+2. Di *Access Management*, buat 3 akun:
+   - **device** (publish + subscribe) → `MQTT_USER`/`MQTT_PASS` di `config.h` firmware
+   - **server** (publish) → `MQTT_SERVER_USER`/`MQTT_SERVER_PASS`
+   - **dashboard** (subscribe saja; kredensial ini terlihat di browser) → `MQTT_VIEW_USER`/`MQTT_VIEW_PASS`
+3. Isi env web (di `.env.local` dan Vercel): `MQTT_URL=mqtts://<host>:8883`, `MQTT_WS_URL=wss://<host>:8884/mqtt`, plus akun di atas.
+4. Isi `MQTT_HOST` (+ akun device) di `config.h`, lalu upload ulang firmware.
+
+Kalau semua tersambung, pil di navigasi dashboard berubah jadi **Live · MQTT**. Tanpa env MQTT, dashboard kembali ke polling tiap 3 detik.
+
 **Uji tanpa hardware:**
 
 ```bash
 node tools/simulate-esp32.mjs --url http://localhost:3000 --id gh-01 --key <api_key>
+# dengan MQTT:
+node tools/simulate-esp32.mjs --url http://localhost:3000 --id gh-01 --key <api_key> \
+  --mqtt-url mqtts://<host>:8883 --mqtt-user <akun device> --mqtt-pass <password>
 ```
 
 Data dari simulator adalah data buatan. Setelah selesai uji, hapus dengan:
@@ -140,7 +172,8 @@ delete from commands;
    - **DHT sensor library** (Adafruit) + **Adafruit Unified Sensor**
    - **ESP32Servo**
    - **ArduinoJson** (v7)
-3. Salin `config.example.h` menjadi `config.h`, lalu isi WiFi, `SERVER_URL`, `DEVICE_ID`, dan `DEVICE_KEY`. Kosongkan `WIFI_SSID` untuk tes offline di breadboard.
+   - **PubSubClient** (Nick O'Leary), untuk MQTT
+3. Salin `config.example.h` menjadi `config.h`, lalu isi WiFi, `SERVER_URL`, `DEVICE_ID`, dan `DEVICE_KEY`. Kosongkan `WIFI_SSID` untuk tes offline di breadboard. Untuk MQTT, isi juga `MQTT_HOST`, `MQTT_USER`, `MQTT_PASS` (kosongkan `MQTT_HOST` = MQTT nonaktif).
 4. Pilih board **ESP32 Dev Module**.
 5. **Cabut adaptor 5 V sebelum upload lewat USB.**
 
@@ -170,6 +203,7 @@ Skema lengkap: `docs/skema_wiring_esp32_greenhouse.png`
 - **Sensor tidak valid:** jika sensor tanah di luar rentang atau DHT22 gagal 3× berturut-turut, pompa otomatis berhenti dan tidak ada dosis baru.
 - **Servo:** bergerak bertahap (tetap 1°/15 ms, konstanta `SERVO_STEP_MS` di firmware) supaya tutup tidak terbanting, dan sudutnya dibatasi maksimal 90° dari posisi tertutup. Setelah sampai, servo sengaja **tidak** di-*detach*: sinyal PWM tetap menahan posisi, karena sebagian MG996R meluncur sendiri ke ujung saat sinyal dilepas dan tutup bisa melorot karena beratnya. Posisi terakhir disimpan di NVS, jadi setelah restart (mis. brownout) servo tidak melompat.
 - **HTTP:** tidak dijalankan saat pompa atau servo sedang bergerak.
+- **MQTT:** sambung ulang ke broker (TLS, bisa memblokir 1–3 s) juga tidak dijalankan saat pompa atau servo bergerak, dan dicoba paling cepat tiap 10 s. Broker mati tidak mengganggu otomasi maupun HTTP.
 
 ## 4. Urutan tes (sesuai handoff)
 
@@ -188,6 +222,7 @@ Skema lengkap: `docs/skema_wiring_esp32_greenhouse.png`
 | GET / PUT | `/api/devices/:id/notify` | Setting notifikasi Telegram node (chat ID + jenis pesan) |
 | POST | `/api/devices/:id/notify/test` | Kirim pesan Telegram uji |
 | GET | `/api/notify/chats` | Chat yang baru mengirim pesan ke bot (untuk memilih chat ID) |
+| GET | `/api/mqtt/config` | Alamat WebSocket + akun subscribe MQTT untuk dashboard (`enabled: false` kalau MQTT tidak diatur) |
 | GET | `/api/cron/offline` | Cek node offline → Telegram (header `Authorization: Bearer <CRON_SECRET>`) |
 | GET / POST | `/api/devices` | Daftar node / tambah node |
 | GET | `/api/devices/:id/state` | Status terkini + setting |
