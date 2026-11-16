@@ -1,16 +1,18 @@
 // Notifikasi WhatsApp lewat Fonnte (https://fonnte.com).
 // Server hanya MENGABARKAN kejadian; keputusan aktuator tetap di ESP32.
 //
-// Env:
+// Env (berlaku untuk semua node):
 //   FONNTE_TOKEN  token device dari dashboard Fonnte
-//   WA_TARGET     nomor tujuan, pisahkan koma (08xx / 628xx). Boleh juga ID grup Fonnte.
+//   WA_TARGET     nomor tujuan bawaan, pisahkan koma (08xx / 628xx). Boleh juga ID grup Fonnte.
+//                 Tiap node bisa punya nomor sendiri + pilihan jenis pesan (tabel notify_settings,
+//                 diatur dari tombol lonceng di dashboard node).
 //   WA_DRY_RUN=1  jangan kirim, cukup tulis ke log server (untuk uji)
-//   WA_AUTO_EVENTS=0  matikan pesan untuk tiap aksi otomatis (siram, buka/tutup tutup); default aktif
 //   APP_URL       opsional, untuk tautan dashboard di pesan (di Vercel otomatis dari domain production)
 
 import { sql, APP_TZ } from "@/lib/db";
+import { DEFAULT_PREFS, TOGGLE_KEYS, type NotifyPrefs, type NotifyToggle } from "@/lib/notify-prefs";
 
-export type NotifyKind = "tank_warning" | "safety" | "brownout" | "sensor" | "offline" | "online" | "auto";
+export type NotifyKind = "tank_warning" | "safety" | "brownout" | "sensor" | "offline" | "online" | "auto" | "test";
 
 /** Jeda minimum antar pesan sejenis per node, supaya tidak spam. offline/online diatur oleh state, bukan cooldown. */
 const COOLDOWN_MIN: Record<NotifyKind, number> = {
@@ -21,15 +23,35 @@ const COOLDOWN_MIN: Record<NotifyKind, number> = {
   offline: 0,
   online: 0,
   auto: 0, // tiap aksi otomatis dikabarkan; aksi dalam satu sync digabung jadi satu pesan
+  test: 0,
 };
 
-export const autoEventsEnabled = () => process.env.WA_AUTO_EVENTS !== "0";
+/** Toggle di notify_settings yang mengizinkan jenis pesan ini (null = selalu; aksi otomatis disaring pemanggil per baris). */
+const TOGGLE_OF: Record<NotifyKind, NotifyToggle | null> = {
+  tank_warning: "tank_warning",
+  safety: "safety",
+  brownout: "brownout",
+  sensor: "sensor",
+  offline: "offline",
+  online: "offline",
+  auto: null,
+  test: null,
+};
 
 /** Node dianggap offline (untuk peringatan WA) setelah sekian menit tanpa data. */
 export const OFFLINE_ALERT_MIN = Math.max(1, Number(process.env.WA_OFFLINE_MIN) || 5);
 
-const DRY_RUN = process.env.WA_DRY_RUN === "1";
-export const waEnabled = () => DRY_RUN || !!(process.env.FONNTE_TOKEN && process.env.WA_TARGET);
+export const DRY_RUN = process.env.WA_DRY_RUN === "1";
+/** Server bisa mengirim (ada token). Nomor tujuan dicek per node. */
+export const waEnabled = () => DRY_RUN || !!process.env.FONNTE_TOKEN;
+export const envTarget = () => process.env.WA_TARGET?.trim() || null;
+
+/** Setting notifikasi node; tanpa baris = semua aktif, nomor dari env. */
+export async function getNotifyPrefs(deviceId: string): Promise<NotifyPrefs> {
+  const [row] = await sql<NotifyPrefs[]>`
+    select wa_target, ${sql(TOGGLE_KEYS)} from notify_settings where device_id = ${deviceId}`;
+  return row ? { ...DEFAULT_PREFS, ...row } : { ...DEFAULT_PREFS };
+}
 
 const appUrl = () => {
   const u = process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`);
@@ -46,16 +68,16 @@ export const fmtDuration = (ms: number) => {
   return m % 60 ? `${h} jam ${m % 60} menit` : `${h} jam`;
 };
 
-async function sendWhatsApp(message: string): Promise<{ ok: boolean; error?: string }> {
+async function sendWhatsApp(target: string, message: string): Promise<{ ok: boolean; error?: string }> {
   if (DRY_RUN) {
-    console.log(`[wa:dry-run] →\n${message}`);
+    console.log(`[wa:dry-run] → ${target}\n${message}`);
     return { ok: true };
   }
   try {
     const res = await fetch("https://api.fonnte.com/send", {
       method: "POST",
       headers: { Authorization: process.env.FONNTE_TOKEN! },
-      body: new URLSearchParams({ target: process.env.WA_TARGET!, message, countryCode: "62" }),
+      body: new URLSearchParams({ target, message, countryCode: "62" }),
       signal: AbortSignal.timeout(10_000),
     });
     // Fonnte membalas HTTP 200 juga saat gagal; status ada di body
@@ -67,17 +89,23 @@ async function sendWhatsApp(message: string): Promise<{ ok: boolean; error?: str
   }
 }
 
-/**
- * Kirim satu pesan untuk node + catat ke tabel notifications.
- * Mengembalikan true jika terkirim; false jika nonaktif, masih cooldown, atau gagal.
- */
+/** sent = terkirim; skipped = nonaktif / dimatikan untuk node ini / tanpa nomor / masih cooldown; failed = gagal kirim. */
+export type NotifyResult = { status: "sent" | "skipped" | "failed"; error?: string };
+
+/** Kirim satu pesan untuk node + catat ke tabel notifications. `prefs` boleh diisi supaya tidak dibaca ulang. */
 export async function notify(
   device: { id: string; name: string },
   kind: NotifyKind,
   text: string,
   at: Date = new Date(),
-): Promise<boolean> {
-  if (!waEnabled()) return false;
+  prefs?: NotifyPrefs,
+): Promise<NotifyResult> {
+  if (!waEnabled()) return { status: "skipped", error: "FONNTE_TOKEN belum diisi di server" };
+  const p = prefs ?? (await getNotifyPrefs(device.id));
+  const toggle = TOGGLE_OF[kind];
+  if (toggle && !p[toggle]) return { status: "skipped" };
+  const target = p.wa_target || envTarget();
+  if (!target) return { status: "skipped", error: "Nomor tujuan belum diisi" };
   const cd = COOLDOWN_MIN[kind];
   if (cd > 0) {
     const [recent] = await sql`
@@ -85,18 +113,18 @@ export async function notify(
       where device_id = ${device.id} and kind = ${kind} and ok
         and ts > now() - make_interval(mins => ${cd})
       limit 1`;
-    if (recent) return false;
+    if (recent) return { status: "skipped" };
   }
   const url = appUrl();
   const message = [`🌱 *${device.name}* (${device.id})`, text, `🕒 ${fmtTime(at)}`, url && `${url}/devices/${device.id}`]
     .filter(Boolean)
     .join("\n");
-  const r = await sendWhatsApp(message);
+  const r = await sendWhatsApp(target, message);
   await sql`
     insert into notifications (device_id, kind, message, ok, error)
     values (${device.id}, ${kind}, ${message}, ${r.ok}, ${r.error ?? null})`;
   if (!r.ok) console.error(`[wa] gagal kirim ${kind} untuk ${device.id}: ${r.error}`);
-  return r.ok;
+  return r.ok ? { status: "sent" } : { status: "failed", error: r.error };
 }
 
 const SAFETY_REASON: Record<string, string> = {
@@ -142,7 +170,7 @@ const n1 = (v: number) => v.toLocaleString("id-ID", { maximumFractionDigits: 1 }
 export function autoActionLine(
   e: { actuator: string; action: string; value: number | null; trigger: string },
   ctx: AutoCtx,
-): string | null {
+): { toggle: "auto_pump" | "auto_lid"; text: string } | null {
   if (e.trigger !== "auto") return null;
   const S = ctx.settings ?? {};
   const R = ctx.reading;
@@ -151,7 +179,7 @@ export function autoActionLine(
     const flow = Number(S.pump_flow_ml_s) || 0;
     const ml = flow > 0 && e.value != null ? `, ±${Math.round((flow * e.value) / 1000)} ml` : "";
     const why = R?.soil_pct != null && S.soil_dry_pct != null ? ` (tanah ${n1(R.soil_pct)} %, batas ${S.soil_dry_pct} %)` : "";
-    return `💧 Menyiram otomatis${sec}${ml}${why}`;
+    return { toggle: "auto_pump", text: `💧 Menyiram otomatis${sec}${ml}${why}` };
   }
   if (e.actuator === "lid" && (e.action === "open" || e.action === "close")) {
     const t = R?.temperature_c, h = R?.humidity_pct;
@@ -167,7 +195,8 @@ export function autoActionLine(
             : ` (suhu ${n1(t)} °C, RH ${n1(h)} %)`;
       } else why = ` (suhu ${n1(t)} °C, RH ${n1(h)} %)`;
     }
-    return e.action === "open" ? `🌬️ Tutup dibuka otomatis untuk ventilasi${why}` : `🔒 Tutup ditutup otomatis${why}`;
+    const text = e.action === "open" ? `🌬️ Tutup dibuka otomatis untuk ventilasi${why}` : `🔒 Tutup ditutup otomatis${why}`;
+    return { toggle: "auto_lid", text };
   }
   return null;
 }

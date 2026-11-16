@@ -24,6 +24,33 @@ export function Brand({ onClick, large }: { onClick?: (e: React.MouseEvent) => v
   );
 }
 
+/** Nada pesan: ok (berhasil), info, warn (perlu perhatian), err (gagal). */
+export type AlertTone = "ok" | "info" | "warn" | "err";
+
+/** Glyph putih di atas lingkaran berwarna: centang, "i", atau "!". */
+function AlertIcon({ tone }: { tone: AlertTone }) {
+  return (
+    <svg className="alert-ico" viewBox="0 0 20 20" width={20} height={20} aria-hidden>
+      <circle cx="10" cy="10" r="10" fill="currentColor" />
+      <g stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none">
+        {tone === "ok" ? <path d="m6 10.3 2.7 2.7L14 7.6" />
+          : tone === "info" ? <><path d="M10 9.2V14" /><path d="M10 6.2v.01" /></>
+          : <><path d="M10 5.8V11" /><path d="M10 14v.01" /></>}
+      </g>
+    </svg>
+  );
+}
+
+/** Kotak pesan berwarna lembut + ikon bulat; dipakai untuk toast dan catatan di popup. */
+export function Alert({ tone, children, className = "" }: { tone: AlertTone; children: ReactNode; className?: string }) {
+  return (
+    <div className={`alert ${tone} ${className}`} role={tone === "err" ? "alert" : undefined}>
+      <AlertIcon tone={tone} />
+      <span className="alert-text">{children}</span>
+    </div>
+  );
+}
+
 /** Tab kecil untuk memilih rentang waktu. */
 export function Tabs<T extends string | number>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: [T, string][] }) {
   return (

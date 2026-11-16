@@ -8,7 +8,7 @@ import type { Reading } from "@/lib/types";
 import { SERIES } from "@/lib/chart";
 import { PlantArt } from "./PlantArt";
 import { Icon, type IconName } from "./icons";
-import { GaugeSlider, NumField, type SliderHandle } from "./ui";
+import { GaugeSlider, NumField, type AlertTone, type SliderHandle } from "./ui";
 
 type Props = {
   current: Settings & { preset_id: number | null };
@@ -18,7 +18,7 @@ type Props = {
   busy: boolean;
   /** Terapkan preset; `values` diisi kalau ambangnya diubah dari nilai preset. */
   onApply: (preset: Preset, values: PresetValues | null) => void;
-  notify: (text: string, err?: boolean) => void;
+  notify: (text: string, tone?: AlertTone) => void;
 };
 
 const pick = (v: PresetValues): PresetValues => Object.fromEntries(PRESET_FIELDS.map((k) => [k, Number(v[k])])) as PresetValues;
@@ -61,7 +61,7 @@ export default function PresetPicker({ current, reading, online, busy, onApply, 
     try {
       setPresets(await api<Preset[]>("/api/presets"));
     } catch (e) {
-      notifyRef.current(`Gagal memuat preset: ${(e as Error).message}`, true);
+      notifyRef.current(`Gagal memuat preset: ${(e as Error).message}`, "err");
     }
   }, []);
 
@@ -88,7 +88,7 @@ export default function PresetPicker({ current, reading, online, busy, onApply, 
 
   async function act(fn: () => Promise<void>) {
     setWorking(true);
-    try { await fn(); } catch (e) { notify((e as Error).message, true); } finally { setWorking(false); }
+    try { await fn(); } catch (e) { notify((e as Error).message, "err"); } finally { setWorking(false); }
   }
 
   const create = () => act(async () => {

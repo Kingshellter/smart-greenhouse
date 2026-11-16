@@ -8,7 +8,8 @@
 import { after } from "next/server";
 import { sql } from "@/lib/db";
 import { bad, num, oneOf, readJson, safeEqual } from "@/lib/http";
-import { autoActionLine, autoActionsText, autoEventsEnabled, eventAlert, fmtDuration, notify, waEnabled, type NotifyKind } from "@/lib/notify";
+import { autoActionLine, autoActionsText, eventAlert, fmtDuration, getNotifyPrefs, notify, waEnabled, type NotifyKind } from "@/lib/notify";
+import type { NotifyPrefs } from "@/lib/notify-prefs";
 import { SETTINGS_COLUMNS } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -89,21 +90,26 @@ export async function POST(req: Request) {
     const hasReading = !!r && typeof r === "object";
     after(async () => {
       try {
+        // setting notifikasi node dibaca sekali, hanya kalau memang ada yang mau dikirim
+        let cached: NotifyPrefs | undefined;
+        const prefs = async () => (cached ??= await getNotifyPrefs(deviceId));
         if (prev?.alert_at) {
           const down = prev.prev_seen ? ` setelah offline ±${fmtDuration(now - prev.prev_seen.getTime())}` : "";
-          await notify(device, "online", `✅ *Node online lagi*${down}. Data dan perintah web jalan kembali.`);
+          await notify(device, "online", `✅ *Node online lagi*${down}. Data dan perintah web jalan kembali.`, undefined, await prefs());
         }
-        for (const a of alerts) await notify(device, a.kind, a.text, a.at);
-        if (hasReading) await checkSensors(device);
-        if (autoEventsEnabled() && autoEvents.length) {
+        for (const a of alerts) await notify(device, a.kind, a.text, a.at, await prefs());
+        if (hasReading) await checkSensors(device, prefs);
+        if (autoEvents.length) {
+          const p = await prefs();
           const reading = hasReading
             ? { soil_pct: num(r.soil_pct, 0, 100), temperature_c: num(r.temperature_c, -20, 80), humidity_pct: num(r.humidity_pct, 0, 100) }
             : undefined;
+          // hanya jenis aksi yang dinyalakan untuk node ini (Siram / Ventilasi otomatis)
           const lines = autoEvents.flatMap((e) => {
-            const text = autoActionLine(e, { settings, reading: e.fresh ? reading : undefined });
-            return text ? [{ text, at: e.at }] : [];
+            const line = autoActionLine(e, { settings, reading: e.fresh ? reading : undefined });
+            return line && p[line.toggle] ? [{ text: line.text, at: e.at }] : [];
           });
-          if (lines.length) await notify(device, "auto", autoActionsText(lines), lines[lines.length - 1].at);
+          if (lines.length) await notify(device, "auto", autoActionsText(lines), lines[lines.length - 1].at, p);
         }
       } catch (e) {
         console.error("[wa]", e);
@@ -111,12 +117,11 @@ export async function POST(req: Request) {
     });
   }
 
-
   return Response.json({ settings, commands, server_time: Math.floor(now / 1000) });
 }
 
 /** Sensor tidak terbaca di 2 reading terakhir berturut-turut (firmware tidak mengirim nilai yang invalid). */
-async function checkSensors(device: { id: string; name: string }) {
+async function checkSensors(device: { id: string; name: string }, prefs: () => Promise<NotifyPrefs>) {
   const rows = await sql`
     select soil_pct, temperature_c, humidity_pct from readings
     where device_id = ${device.id} order by ts desc limit 2`;
@@ -131,5 +136,7 @@ async function checkSensors(device: { id: string; name: string }) {
     `🧪 *Sensor bermasalah:* ${broken.join(" dan ")} tidak terbaca. Penyiraman otomatis berhenti` +
       (broken.length > 1 || broken[0] !== "sensor tanah" ? " dan tutup tidak bergerak otomatis" : "") +
       ` sampai sensor terbaca lagi. Cek kabel dan konektor sensor.`,
+    undefined,
+    await prefs(),
   );
 }

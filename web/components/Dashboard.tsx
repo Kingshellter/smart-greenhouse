@@ -13,9 +13,11 @@ import EventLog from "./EventLog";
 import GreenhouseView from "./GreenhouseView";
 import SensorCards from "./SensorCards";
 import DeviceBar from "./DeviceBar";
+import NotifySettings from "./NotifySettings";
 import type { HotspotKind } from "./Greenhouse3D";
 import { AirCard, LidCard, PumpCard, SoilCard, TankCard, type Lock } from "./HotspotCards";
-import { Brand } from "./ui";
+import { Brand, type AlertTone } from "./ui";
+import { useToasts } from "./Toasts";
 import { Icon, type IconName } from "./icons";
 
 type Lid = "closed" | "open" | "maintenance";
@@ -35,20 +37,13 @@ export default function Dashboard({ id }: { id: string }) {
   const { data: recent } = usePoll<ActuatorEvent[]>(`/api/devices/${id}/events?limit=5`, 3000);
   const [inflight, setInflight] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending>({ since: 0 });
-  const [toast, setToast] = useState<{ text: string; err?: boolean } | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { flash, node: toasts } = useToasts();
 
   // Siapkan halaman daftar node supaya tombol kembali langsung pindah.
   useEffect(() => {
     router.prefetch("/");
     prefetch("/api/devices");
   }, [router]);
-
-  const flash = (text: string, err = false) => {
-    setToast({ text, err });
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 3200);
-  };
 
   // ── Animasi pompa ────────────────────────────────────────────────────────
   // Firmware tidak mengirim data selama pompa menyala, jadi web jarang melihat status "on".
@@ -74,7 +69,6 @@ export default function Dashboard({ id }: { id: string }) {
   }, [recent]);
   useEffect(() => () => {
     if (pumpTimer.current) clearTimeout(pumpTimer.current);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
   }, []);
 
   // ── Konfirmasi aksi optimistis ───────────────────────────────────────────
@@ -88,20 +82,20 @@ export default function Dashboard({ id }: { id: string }) {
     const lidDone = pending.lid && (lidOk || expired);
     if (!modeDone && !lidDone) return;
     // Tanpa konfirmasi, tampilan kembali ke posisi terakhir; beri tahu supaya tidak terlihat "melompat" begitu saja.
-    if (pending.lid && !lidOk) flash("ESP32 belum menjalankan perintah tutup (offline?), tampilan kembali ke posisi terakhir", true);
+    if (pending.lid && !lidOk) flash("ESP32 belum menjalankan perintah tutup (offline?), tampilan kembali ke posisi terakhir", "warn");
     setPending((p) => ({ ...p, mode: modeDone ? undefined : p.mode, lid: lidDone ? undefined : p.lid }));
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps -- hanya dicek saat data baru masuk
 
-  async function send(key: string, fn: () => Promise<unknown>, okText: string, onFail?: () => void) {
+  async function send(key: string, fn: () => Promise<unknown>, okText: string, onFail?: () => void, okTone: AlertTone = "ok") {
     if (inflight === key && key !== "settings") return; // cegah klik ganda untuk aksi alat
     setInflight(key);
     try {
       await fn();
-      flash(okText);
+      flash(okText, okTone);
       refresh();
     } catch (e) {
       onFail?.();
-      flash((e as Error).message, true);
+      flash((e as Error).message, "err");
     } finally {
       setInflight(null);
     }
@@ -133,7 +127,7 @@ export default function Dashboard({ id }: { id: string }) {
     setPending((p) => ({ ...p, lid, since: Date.now() }));
     send("lid", () => command("lid", { position: exitMaint ? "exit_maintenance" : lid }),
       `Perintah dikirim, ESP32 ${lid === "open" ? "membuka" : lid === "closed" ? "menutup" : "mengangkat"} tutup dalam beberapa detik`,
-      () => setPending((p) => ({ ...p, lid: undefined })));
+      () => setPending((p) => ({ ...p, lid: undefined })), "info");
   };
 
   const water = () => {
@@ -141,7 +135,7 @@ export default function Dashboard({ id }: { id: string }) {
     manualPumpAt.current = Date.now();
     playPump(s.dose_ms);
     send("pump", () => command("pump_dose", { ms: s.dose_ms }), `Siram ${s.dose_ms / 1000} s dikirim ke ESP32`,
-      () => { manualPumpAt.current = 0; setPumpAnim(false); });
+      () => { manualPumpAt.current = 0; setPumpAnim(false); }, "info");
   };
 
   const back = (e: React.MouseEvent) => {
@@ -226,6 +220,7 @@ export default function Dashboard({ id }: { id: string }) {
         </div>
         <div className="nav-right">
           <code className="node-id">{device.id.toUpperCase()}</code>
+          <NotifySettings id={id} notify={flash} />
           <span className={`live ${device.online ? "on" : ""}`}>
             <i />{device.online ? `Live · ${ago(r?.ts)}` : `Offline · ${ago(device.last_seen)}`}
           </span>
@@ -301,7 +296,7 @@ export default function Dashboard({ id }: { id: string }) {
                    busy={inflight === "settings"} onSave={(p, okText) => saveSettings(p, okText)} cards={cards} />
       </section>
 
-      <div className={`toast ${toast ? "show" : ""} ${toast?.err ? "err" : ""}`} role="status">{toast?.text}</div>
+      {toasts}
     </main>
   );
 }

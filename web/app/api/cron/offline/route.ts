@@ -27,15 +27,16 @@ export async function GET(req: Request) {
 
   const alerted: string[] = [];
   for (const d of rows) {
-    const ok = await notify(
+    const res = await notify(
       d,
       "offline",
       `📴 *Node offline:* tidak ada data selama ±${fmtDuration(Date.now() - d.last_seen.getTime())}. ` +
         `Kontrol otomatis tetap jalan di ESP32, tapi data dan perintah dari web tertunda. Cek WiFi dan daya node.`,
     );
-    if (ok) alerted.push(d.id);
-    // Gagal kirim → lepas klaim, dicoba lagi di cron berikutnya
-    else await sql`update devices set offline_alert_at = null where id = ${d.id}`;
+    if (res.status === "sent") alerted.push(d.id);
+    // Gagal kirim → lepas klaim, dicoba lagi di cron berikutnya. Dimatikan untuk node ini → klaim tetap,
+    // supaya tidak dicek ulang tiap cron (dan "online lagi" juga tidak dikirim karena toggle-nya sama).
+    else if (res.status === "failed") await sql`update devices set offline_alert_at = null where id = ${d.id}`;
   }
   return Response.json({ enabled: true, checked: rows.length, alerted });
 }

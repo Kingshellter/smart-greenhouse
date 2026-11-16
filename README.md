@@ -99,19 +99,22 @@ npm run dev                    # http://localhost:3000
 **Notifikasi WhatsApp (opsional):**
 
 1. Daftar di [fonnte.com](https://fonnte.com), tambah device, lalu scan QR dengan nomor WA pengirim (sebaiknya nomor khusus, bukan nomor pribadi).
-2. Isi env `FONNTE_TOKEN` (token device) dan `WA_TARGET` (nomor tujuan, pisah koma). Jalankan `database/notifications.sql` jika belum.
-3. Untuk peringatan *node offline*, isi `CRON_SECRET` (string acak) lalu buat job di [cron-job.org](https://cron-job.org) tiap 5 menit:
+2. Isi env `FONNTE_TOKEN` (token device). Jalankan `database/notifications.sql` jika belum.
+3. Atur per node lewat tombol 🔔 di navigasi dashboard node: nomor tujuan (pisah koma) dan jenis pesan yang dikirim, plus tombol *Kirim pesan uji*. Nomor yang dikosongkan memakai env `WA_TARGET` (opsional, nomor bawaan untuk semua node). Token Fonnte (nomor pengirim) tetap satu untuk seluruh web.
+4. Untuk peringatan *node offline*, isi `CRON_SECRET` (string acak) lalu buat job di [cron-job.org](https://cron-job.org) tiap 5 menit:
    `GET https://<domain>/api/cron/offline` dengan header `Authorization: Bearer <CRON_SECRET>`.
    (Node yang offline tidak mengirim apa-apa, jadi perlu pemicu dari luar; cron Vercel Hobby hanya sekali sehari.)
 
-| Kejadian | Sumber | Jeda minimum per node |
+Semua jenis aktif secara bawaan; tiap jenis bisa dimatikan per node.
+
+| Kejadian (sakelar di popup) | Sumber | Jeda minimum per node |
 |---|---|---|
-| Tangki air kemungkinan kosong | event `system tank_warning` | 60 menit |
+| Tangki air kosong | event `system tank_warning` | 60 menit |
 | Pompa dihentikan pengaman | event `system safety` | 15 menit |
 | Sensor tidak terbaca | 2 reading berturut-turut tanpa nilai | 60 menit |
-| ESP32 restart karena brownout | event `system boot` | 30 menit |
+| Restart karena brownout | event `system boot` | 30 menit |
 | Node offline / online lagi | `/api/cron/offline` (setelah `WA_OFFLINE_MIN`, default 5 menit) / reading pertama setelahnya | sekali per kejadian |
-| Aksi otomatis: siram, tutup dibuka/ditutup (beserta alasannya, mis. suhu ≥ batas) | event dengan trigger `auto` | tiap aksi; aksi dalam satu sync digabung jadi satu pesan. Matikan dengan `WA_AUTO_EVENTS=0` |
+| Siram otomatis / Ventilasi otomatis (beserta alasannya, mis. suhu ≥ batas) | event pompa / tutup dengan trigger `auto` | tiap aksi; aksi dalam satu sync digabung jadi satu pesan |
 
 Semua pesan (berhasil atau gagal) tercatat di tabel `notifications`. Untuk uji tanpa mengirim, isi `WA_DRY_RUN=1`: pesan hanya ditulis ke log server.
 
@@ -181,6 +184,8 @@ Skema lengkap: `docs/skema_wiring_esp32_greenhouse.png`
 | Method | Endpoint | Fungsi |
 |---|---|---|
 | POST | `/api/ingest` | Dari ESP32 (header `x-device-key`) |
+| GET / PUT | `/api/devices/:id/notify` | Setting notifikasi WhatsApp node (nomor + jenis pesan) |
+| POST | `/api/devices/:id/notify/test` | Kirim pesan WA uji |
 | GET | `/api/cron/offline` | Cek node offline → WhatsApp (header `Authorization: Bearer <CRON_SECRET>`) |
 | GET / POST | `/api/devices` | Daftar node / tambah node |
 | GET | `/api/devices/:id/state` | Status terkini + setting |
