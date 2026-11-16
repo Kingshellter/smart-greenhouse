@@ -1,5 +1,7 @@
 # Studi Literatur — 13 paper (2022–2026)
 
+Terkait: ringkasan proyek dan kesesuaian dengan kebutuhan dosen di [README.md](../README.md), rancangan teknis di [setup.md](setup.md), [hardware.md](hardware.md), dan [api.md](api.md). Bagian "Ringkasan posisi proyek kami" di bawah menjelaskan apa yang membedakan proyek ini.
+
 Syarat dosen: minimal 10 studi terkait dari 5 tahun terakhir (2021–2026).
 No. 1–3 adalah paper yang sudah ada di PPT Laporan Antara 2; no. 4–13 adalah tambahan.
 
