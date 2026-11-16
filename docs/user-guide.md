@@ -89,9 +89,6 @@ Cara mengukur nilai awalnya ada di [hardware.md](hardware.md#urutan-tes).
 ![Notifikasi](laporan/gambar/5-10-notifikasi.png)
 
 Tombol 🔔 di navigasi membuka pengaturan per node: chat ID tujuan dan jenis pesan (tangki kosong, pompa dihentikan pengaman, sensor bermasalah, brownout, offline/online, siram otomatis, ventilasi otomatis). Cara menambah penerima: kirim `/start` ke bot dari akun Telegram penerima, tekan *Cari chat ID*, lalu *Pakai* dan *Simpan*. Tombol *Kirim pesan uji* memastikan tujuannya benar. Instalasi sisi server ada di [setup.md](setup.md#3-notifikasi-telegram-opsional).
-
-> Gambar di atas masih tampilan versi WhatsApp; isinya sama kecuali kolom nomor yang kini berupa chat ID.
-
 ## Arti status
 
 | Status | Arti | Yang dilakukan |
