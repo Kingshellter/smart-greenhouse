@@ -1,0 +1,80 @@
+erDiagram
+  plant_presets |o--o{ device_settings : preset
+  devices ||--|| device_settings : setting
+  devices ||--o{ readings : mengirim
+  devices ||--o{ actuator_events : mencatat
+  devices ||--o{ commands : menerima
+  devices ||--o| notify_settings : notifikasi
+  devices ||--o{ notifications : "log Telegram"
+
+  plant_presets {
+    int id PK
+    text name
+    bool builtin
+    int soil_dry_pct
+    numeric temp_open_close_c
+    numeric hum_open_close_pct
+  }
+  devices {
+    text id PK
+    text name
+    text api_key
+    timestamptz last_seen
+    timestamptz offline_alert_at
+  }
+  device_settings {
+    text device_id PK
+    text mode
+    int soil_dry_pct
+    int dose_ms
+    int soak_s
+    int max_doses_per_hour
+    numeric temp_open_c
+    numeric temp_close_c
+    numeric hum_open_pct
+    numeric hum_close_pct
+    int lid_closed_open_maint_deg
+    int soil_raw_dry_wet
+    int report_interval_s
+    numeric pump_flow_ml_s
+    int preset_id FK
+  }
+  readings {
+    bigint id PK
+    timestamptz ts
+    numeric soil_pct
+    numeric temperature_c
+    numeric humidity_pct
+    text lid_state
+    text pump_state
+    bool tank_warning
+    int rssi
+  }
+  actuator_events {
+    bigint id PK
+    timestamptz ts
+    text actuator
+    text action
+    numeric value
+    text trigger
+    jsonb detail
+  }
+  commands {
+    bigint id PK
+    timestamptz created_at
+    text type
+    jsonb payload
+    text status
+    timestamptz sent_at
+  }
+  notify_settings {
+    text device_id PK
+    text tg_chat_id
+    bool toggles
+  }
+  notifications {
+    bigint id PK
+    text kind
+    text message
+    bool ok
+  }

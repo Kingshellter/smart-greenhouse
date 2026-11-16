@@ -1,0 +1,38 @@
+flowchart LR
+  subgraph L1["1 · Perangkat IoT"]
+    soil["Sensor tanah kapasitif v1.2<br/><small>kadar air media tanam</small>"]
+    dht["DHT22<br/><small>suhu & kelembapan udara</small>"]
+    relay["Relay + pompa 5 V<br/><small>penyiraman per dosis</small>"]
+    servo["Servo MG996R<br/><small>tutup atap ventilasi</small>"]
+  end
+  subgraph L2["2 · Edge"]
+    esp["<b>ESP32 DevKit V1</b><br/>baca sensor (EMA)<br/>keputusan otomatis<br/>pengaman lokal<br/>antrean event"]
+  end
+  subgraph L3["3 · Gateway & jaringan"]
+    router["Router / hotspot<br/>Wi-Fi 2,4 GHz"]
+    inet((Internet))
+  end
+  subgraph L4["4 · Cloud milik sendiri"]
+    api["<b>Next.js API</b> (Vercel)<br/>/api/ingest<br/>/api/devices/:id/…"]
+    db[("<b>PostgreSQL</b> (Supabase)<br/>readings · actuator_events<br/>commands · device_settings")]
+    broker["<b>Broker MQTT</b> (EMQX Serverless)<br/>greenhouse/&lt;id&gt;/state · status<br/>greenhouse/&lt;id&gt;/cmd · settings"]
+    tgapi["Telegram Bot API<br/><small>bot notifikasi</small>"]
+  end
+  subgraph L5["5 · Aplikasi pengguna"]
+    dash["<b>Dashboard web</b><br/>model 3D, grafik,<br/>analitik, kontrol"]
+    tg["Telegram<br/><small>notifikasi</small>"]
+  end
+
+  soil --> esp
+  dht --> esp
+  esp --> relay
+  esp --> servo
+  esp <-->|"HTTPS POST tiap 3 s<br/>MQTT/TLS 8883"| router
+  router --- inet
+  inet <-->|HTTPS| api
+  inet <-.->|"MQTT/TLS · WSS"| broker
+  api <--> db
+  api -.->|"publish cmd / settings"| broker
+  api --> tgapi
+  tgapi --> tg
+  dash <-->|"HTTPS polling 3 s<br/>+ state langsung (WSS)"| inet
