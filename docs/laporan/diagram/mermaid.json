@@ -23,7 +23,7 @@
     "activationBkgColor": "#d1fae5",
     "sequenceNumberColor": "#ffffff"
   },
-  "flowchart": { "curve": "basis", "padding": 12, "wrappingWidth": 340 },
+  "flowchart": { "curve": "basis", "padding": 12, "wrappingWidth": 460 },
   "sequence": { "showSequenceNumbers": true, "mirrorActors": true, "messageFontSize": 15, "noteFontSize": 14 },
   "er": { "fontSize": 13 }
 }

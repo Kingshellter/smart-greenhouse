@@ -10,7 +10,7 @@ Smart Mini-Greenhouse: an ESP32 node (soil sensor, DHT22, relay pump, MG996R ser
 
 | Need | File |
 |---|---|
-| Install, env vars, deploy, WhatsApp, simulator, firmware setup | `docs/setup.md` |
+| Install, env vars, deploy, Telegram, MQTT broker, simulator, firmware setup | `docs/setup.md` |
 | Pins, wiring, serial commands, firmware safety, test order | `docs/hardware.md` |
 | API endpoints and the ingest protocol | `docs/api.md` |
 | Common failures and fixes | `docs/troubleshooting.md` |

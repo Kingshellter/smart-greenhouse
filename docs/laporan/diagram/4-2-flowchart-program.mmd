@@ -1,0 +1,36 @@
+flowchart TD
+  start(["ESP32 menyala / restart"])
+  relay["Relay diset OFF sebelum pin dijadikan output<br/>(pompa dipastikan mati)"]
+  boot["Catat alasan restart (power on / brownout / watchdog)<br/>buat timer hardware pompa · muat setting + ID perintah terakhir dari NVS"]
+  nvs{"Posisi tutup terakhir<br/>tersimpan di NVS?"}
+  hold["Tahan servo di sudut terakhir<br/>(tidak melompat)"]
+  close["Servo ke posisi tertutup"]
+  bootev["Catat event boot"]
+  bo{"Restart karena brownout<br/>dan tutup di maintenance?"}
+  back["Turunkan servo 10°<br/>(tidak melewati posisi terbuka)"]
+  net["Mulai Wi-Fi (non-blocking)<br/>siapkan klien MQTT bila MQTT_HOST diisi"]
+  loop(["loop()"])
+  pump["updatePump(): matikan pompa saat timer habis<br/>cadangan: batas mutlak 10 s"]
+  servo["updateServo(): gerak 1° tiap 15 ms ke target<br/>simpan posisi ke NVS saat sampai"]
+  serial["handleSerial(): status · cal · pump · lid"]
+  sensor["Baca sensor tanah tiap 1 s (rata-rata 16 sampel + EMA)<br/>Baca DHT22 tiap 2,5 s (EMA; gagal 3× = tidak valid)"]
+  auto["autoControl(): ventilasi + penyiraman<br/>(lihat flowchart logika kontrol)"]
+  wifi["ensureWifi(): coba sambung ulang tiap 10 s"]
+  mqtt["ensureMqtt(): jaga koneksi broker, terima cmd / settings<br/>sambung ulang tiap 10 s, tidak saat pompa/servo bergerak"]
+  pub["publishState(): kirim state ke broker<br/>aktuator seketika · sensor maks tiap 2 s · heartbeat 10 s"]
+  due{"Pompa mati, servo diam,<br/>dan ≥ 3 s sejak sync terakhir?"}
+  sync["syncCloud(): POST /api/ingest<br/>kirim reading + antrean event<br/>terapkan setting baru · jalankan perintah web"]
+
+  start --> relay --> boot --> nvs
+  nvs -->|ya| hold
+  nvs -->|tidak| close
+  hold --> bootev
+  close --> bootev
+  bootev --> bo
+  bo -->|ya| back
+  bo -->|tidak| net
+  back --> net
+  net --> loop --> pump --> servo --> serial --> sensor --> auto --> wifi --> mqtt --> pub --> due
+  due -->|tidak| loop
+  due -->|ya| sync
+  sync --> loop
