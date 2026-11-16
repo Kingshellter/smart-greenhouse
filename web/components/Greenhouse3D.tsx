@@ -1,8 +1,10 @@
 "use client";
 
 // Model 3D Smart Mini-Greenhouse — rangka aluminium + kaca, ukuran mengikuti kotak asli (1 unit = 1 cm).
-// Kotak 32 × 20 × 20 cm, ruang tanaman kiri (20 cm), ruang elektronik + botol air kanan (12 cm).
-// Tutup ruang tanaman berengsel di tepi belakang dan digerakkan servo; tutup ruang kanan tetap.
+// Kotak 32 × 20 × 20 cm, ruang tanaman kiri (20 cm), ruang elektronik kanan (12 cm).
+// Botol air ditempel di luar dinding kanan; selang lurus dengan tekukan membulat menembus dinding kanan
+// dan sekat, lalu turun ke tanaman. Tutup ruang tanaman berengsel di tepi belakang dan digerakkan servo;
+// tutup ruang elektronik tetap.
 //
 // Sumbu: X kiri→kanan, Y ke atas, Z belakang→depan (dinding depan di z = +10).
 
@@ -39,17 +41,25 @@ export type GreenhouseState = {
 
 const T = 0.3; // tebal akrilik 3 mm
 
-const TUBE_POINTS: [number, number, number][] = [
-  [10, 1.8, 4.8],
-  [10, 9, 4.8],
-  [10, 14.5, 4.8],
-  [9.4, 18.2, 4.9],
-  [6.5, 18.4, 5.2],
-  [4, 17.7, 5.3],
-  [1.5, 17.0, 4.4],
-  [-1.2, 13.0, 2.8],
-  [-2.2, 9.4, 2.0],
+const METAL_P = 0.45; // penampang profil aluminium (cm)
+
+/** Botol air di luar dinding kanan (x = 16), menempel pada rangka; berdiri di lantai. */
+const BOTTLE_R = 3.1;
+const BOTTLE_X = 16 + METAL_P / 2 + BOTTLE_R + 0.05;
+const BOTTLE_Z = 3;
+
+/** Tinggi jalur mendatar selang: di bawah tutup, di atas daun. */
+const TUBE_Y = 17;
+/** Selang: titik sudut jalur lurus; tiap sudut dibulatkan dengan jari-jari TUBE_BEND. */
+const TUBE_POINTS: V3[] = [
+  [BOTTLE_X, 1.6, BOTTLE_Z],   // pompa celup di dasar botol
+  [BOTTLE_X, TUBE_Y, BOTTLE_Z], // naik keluar lewat tutup botol
+  [-2.5, TUBE_Y, BOTTLE_Z],     // mendatar menembus dinding kanan & sekat
+  [-2.5, 10, BOTTLE_Z],         // turun ke atas tanaman
 ];
+const TUBE_BEND = 1.6;
+/** Titik selang menembus kaca (dinding kanan, sekat); di sini dipasang grommet karet. */
+const TUBE_THROUGH = [16 - T / 2, 4];
 
 export default function Greenhouse3D(props: GreenhouseState) {
   const { interactive = true, onReady } = props;
@@ -113,16 +123,18 @@ export default function Greenhouse3D(props: GreenhouseState) {
   );
 }
 
-const BASE_CAM = new THREE.Vector3(-27, 24, 50);
-const TARGET = new THREE.Vector3(0.5, 11, 0);
+// Titik pandang digeser sedikit ke kanan dari tengah kotak, karena botol air menambah lebar di sisi kanan.
+const BASE_CAM = new THREE.Vector3(-25.5, 24, 50);
+const TARGET = new THREE.Vector3(2, 11, 0);
 
 /**
  * Jarak kamera supaya seluruh kotak muat: batas tinggi (tetap) atau batas lebar (layar sempit).
  * Saat tutup diangkat tinggi (maintenance), kamera mundur pelan supaya tutup tidak terpotong.
  * Arah pandang dari pengguna (OrbitControls) dipertahankan; hanya jaraknya yang diatur.
  */
-// Lebar model & seberapa jauh tepi bawahnya di bawah TARGET, dalam satuan bidang target, dilihat dari BASE_CAM.
-const MODEL_W = 40;
+// Lebar model (kotak + botol di kanan) & seberapa jauh tepi bawahnya di bawah TARGET, dalam satuan bidang target,
+// dilihat dari BASE_CAM.
+const MODEL_W = 43;
 const MODEL_BELOW = 19;
 const SIDE_MARGIN = 1.25; // ruang kosong di kiri & kanan; kartu hotspot keluar ke arah tengah, jadi tidak butuh banyak
 const BOTTOM_ROOM_PX = 68; // ruang di bawah model untuk tombol mode yang mengambang di dasar panggung
@@ -198,8 +210,8 @@ function Scene(props: GreenhouseState & { portal: RefObject<HTMLDivElement | nul
       <WaterSystem pumpOn={props.pumpOn} tankWarning={props.tankWarning} />
       {spot("soil", [-9.2, 3.2, 5.9], "Kelembapan tanah", "right", "up")}
       {spot("air", [-16, 17, 3], "Udara", "right", "down")}
-      {spot("pump", [6.6, 18.5, 5.2], "Pompa", "left", "down")}
-      {spot("tank", [10, 8, 8], "Tangki air", "left", "mid")}
+      {spot("pump", [10, TUBE_Y, BOTTLE_Z], "Pompa", "left", "down")}
+      {spot("tank", [BOTTLE_X, 7, BOTTLE_Z + BOTTLE_R], "Tangki air", "left", "mid")}
     </group>
   );
 }
@@ -361,8 +373,6 @@ function boxEdges(min: V3, max: V3): [V3, V3][] {
     });
 }
 
-const METAL_P = 0.45; // penampang profil aluminium (cm)
-
 /** Rangka profil aluminium di sepanjang rusuk yang diberikan. */
 function Frame({ edges }: { edges: [V3, V3][] }) {
   return (
@@ -387,24 +397,36 @@ function Frame({ edges }: { edges: [V3, V3][] }) {
  * Bayangan lembut di bawah kotak supaya model tidak tampak melayang. Tekstur dibuat sekali di kanvas 2D
  * (persegi yang hanya digambar bayangannya), jadi tidak ada render pass tambahan tiap frame.
  */
+// Bidang bayangan (cm) di lantai: cukup lebar untuk kotak + botol di kanan, plus ruang untuk blurnya.
+const SH_X0 = -29.5, SH_X1 = BOTTLE_X + BOTTLE_R + 16, SH_Z0 = -22, SH_Z1 = 24;
+const SH_PX_X = 256 / 60, SH_PX_Z = 256 / 46; // piksel tekstur per cm (sama seperti sebelum botol dipindah)
+
 function GroundShadow() {
   const tex = useMemo(() => {
     const c = document.createElement("canvas");
-    c.width = c.height = 256;
+    c.width = Math.round((SH_X1 - SH_X0) * SH_PX_X);
+    c.height = 256;
     const g = c.getContext("2d");
     if (g) {
-      // persegi digambar di luar kanvas; yang terlihat hanya bayangannya (blur merata, jalan di semua browser)
+      // bentuk digambar di luar kanvas; yang terlihat hanya bayangannya (blur merata, jalan di semua browser).
+      // Kotak + lingkaran botol diisi sebagai satu path, supaya bayangan yang bertumpuk tidak jadi lebih gelap.
+      const px = (x: number) => (x - SH_X0) * SH_PX_X - 512, pz = (z: number) => (z - SH_Z0) * SH_PX_Z;
       g.shadowColor = "#141e12";
       g.shadowBlur = 42;
       g.shadowOffsetX = 512;
-      g.fillRect(-512 + 68, 82, 120, 92);
+      g.beginPath();
+      g.rect(px(-13.56), pz(-7.27), 120, 92);
+      const rx = (BOTTLE_R - 0.6) * SH_PX_X, rz = (BOTTLE_R - 0.6) * SH_PX_Z;
+      g.moveTo(px(BOTTLE_X) + rx, pz(BOTTLE_Z)); // subpath baru, tanpa garis dari sudut persegi
+      g.ellipse(px(BOTTLE_X), pz(BOTTLE_Z), rx, rz, 0, 0, Math.PI * 2);
+      g.fill();
     }
     return new THREE.CanvasTexture(c);
   }, []);
   useEffect(() => () => tex.dispose(), [tex]);
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0.5, -0.06, 1]} renderOrder={0}>
-      <planeGeometry args={[60, 46]} />
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[(SH_X0 + SH_X1) / 2, -0.06, (SH_Z0 + SH_Z1) / 2]} renderOrder={0}>
+      <planeGeometry args={[SH_X1 - SH_X0, SH_Z1 - SH_Z0]} />
       <meshBasicMaterial map={tex} transparent opacity={0.26} depthWrite={false} toneMapped={false} />
     </mesh>
   );
@@ -426,7 +448,7 @@ function GlassBox() {
       <Pane size={[T, h, 20 - 2 * T]} position={[16 - T / 2, y, 0]} />
       {/* sekat kaca buram di 200 mm dari kiri */}
       <Pane size={[T, h, 20 - 2 * T]} position={[4, y, 0]} opacity={0.15} roughness={0.3} />
-      {/* tutup ruang botol air: bentuknya sama dengan tutup tanaman, tapi tetap (tidak bergerak) */}
+      {/* tutup ruang elektronik: bentuknya sama dengan tutup tanaman, tapi tetap (tidak bergerak) */}
       <Pane size={[11.95, 0.2, 20]} position={[10.025, 20.25, 0]} opacity={0.07} />
       <Frame edges={BOX_FRAME} />
     </group>
@@ -552,9 +574,32 @@ function Lettuce() {
 const TUBE_IDLE = new THREE.Color("#e9f3f6");
 const TUBE_FLOW = new THREE.Color("#5ab8f0");
 
+/**
+ * Jalur selang yang rapi: ruas lurus antar titik sudut, tiap sudut dibulatkan (kurva Bézier kuadrat dengan
+ * titik kendali di sudutnya, hampir sama dengan busur lingkaran). Panjangnya dihitung per ruas, jadi
+ * getPointAt() bergerak dengan kecepatan tetap untuk animasi aliran.
+ */
+function roundedPath(points: V3[], radius: number) {
+  const v = points.map((p) => new THREE.Vector3(...p));
+  const path = new THREE.CurvePath<THREE.Vector3>();
+  let from = v[0];
+  for (let i = 1; i < v.length - 1; i++) {
+    const p = v[i];
+    const r = Math.min(radius, p.distanceTo(v[i - 1]) / 2, p.distanceTo(v[i + 1]) / 2);
+    const a = p.clone().addScaledVector(v[i - 1].clone().sub(p).normalize(), r);
+    const b = p.clone().addScaledVector(v[i + 1].clone().sub(p).normalize(), r);
+    path.add(new THREE.LineCurve3(from, a));
+    path.add(new THREE.QuadraticBezierCurve3(a, p, b));
+    from = b;
+  }
+  path.add(new THREE.LineCurve3(from, v[v.length - 1]));
+  return path;
+}
+
 function WaterSystem({ pumpOn, tankWarning }: { pumpOn: boolean; tankWarning: boolean }) {
-  const curve = useMemo(() => new THREE.CatmullRomCurve3(TUBE_POINTS.map((p) => new THREE.Vector3(...p))), []);
-  const tubeGeo = useMemo(() => new THREE.TubeGeometry(curve, 140, 0.26, 12, false), [curve]);
+  const curve = useMemo(() => roundedPath(TUBE_POINTS, TUBE_BEND), []);
+  const tubeGeo = useMemo(() => new THREE.TubeGeometry(curve, 260, 0.26, 12, false), [curve]);
+  useEffect(() => () => tubeGeo.dispose(), [tubeGeo]);
   const tubeMat = useRef<THREE.MeshPhysicalMaterial>(null);
   const water = useRef<THREE.Mesh>(null);
   const waterMat = useRef<THREE.MeshPhysicalMaterial>(null);
@@ -574,7 +619,7 @@ function WaterSystem({ pumpOn, tankWarning }: { pumpOn: boolean; tankWarning: bo
     if (water.current) {
       const s = water.current.scale;
       s.y += (level - s.y) * Math.min(1, dt * 1.5);
-      water.current.position.y = 0.9 + (12 * s.y) / 2;
+      water.current.position.y = 0.4 + (12 * s.y) / 2;
     }
     drops.current?.children.forEach((c, i) => {
       c.visible = f > 0.05;
@@ -593,21 +638,40 @@ function WaterSystem({ pumpOn, tankWarning }: { pumpOn: boolean; tankWarning: bo
 
   return (
     <group>
-      <group position={[10, 0, 4.8]}>
-        {/* botol air */}
-        <mesh position={[0, T + 6.6, 0]} renderOrder={2}>
-          <cylinderGeometry args={[3.1, 3.1, 13, 48, 1, true]} />
+      <group position={[BOTTLE_X, 0, BOTTLE_Z]}>
+        {/* botol air di luar dinding kanan, berdiri di lantai */}
+        <mesh position={[0, 6.6, 0]} renderOrder={2}>
+          <cylinderGeometry args={[BOTTLE_R, BOTTLE_R, 13, 48, 1, true]} />
           <GlassMat opacity={0.18} />
         </mesh>
-        <mesh position={[0, T + 13.2, 0]}>
+        <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}>
+          <circleGeometry args={[BOTTLE_R, 48]} />
+          <GlassMat opacity={0.12} />
+        </mesh>
+        <mesh position={[0, 13.2, 0]}>
           <cylinderGeometry args={[1.4, 1.6, 0.9, 32]} />
           <meshStandardMaterial color="#fbfbf8" roughness={0.3} />
         </mesh>
-        <mesh ref={water} position={[0, 0.9, 0]} scale={[1, level, 1]} renderOrder={1}>
-          <cylinderGeometry args={[2.95, 2.95, 12, 40]} />
+        {/* dua cincin pengikat botol ke dinding, warnanya sama dengan rangka */}
+        {[3.5, 10].map((y) => (
+          <mesh key={y} position={[0, y, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[BOTTLE_R + 0.06, 0.16, 10, 48]} />
+            <MetalMat />
+          </mesh>
+        ))}
+        <mesh ref={water} position={[0, 0.4, 0]} scale={[1, level, 1]} renderOrder={1}>
+          <cylinderGeometry args={[BOTTLE_R - 0.15, BOTTLE_R - 0.15, 12, 40]} />
           <meshPhysicalMaterial ref={waterMat} color="#7cc7f0" transparent opacity={0.45} roughness={0.05} clearcoat={1} envMapIntensity={1.5} depthWrite={false} />
         </mesh>
       </group>
+
+      {/* cincin grommet tempat selang menembus kaca, warnanya sama dengan rangka */}
+      {TUBE_THROUGH.map((x) => (
+        <mesh key={x} position={[x, TUBE_Y, BOTTLE_Z]} rotation={[0, Math.PI / 2, 0]}>
+          <torusGeometry args={[0.36, 0.13, 10, 24]} />
+          <MetalMat />
+        </mesh>
+      ))}
 
       <mesh geometry={tubeGeo}>
         <meshPhysicalMaterial ref={tubeMat} color="#e9f3f6" transparent opacity={0.7} roughness={0.1} clearcoat={1} envMapIntensity={1.5} />
