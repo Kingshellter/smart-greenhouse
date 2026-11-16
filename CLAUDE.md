@@ -19,6 +19,7 @@ Smart Mini-Greenhouse: an ESP32 node (soil sensor, DHT22, relay pump, MG996R ser
 | End-user dashboard guide | `docs/user-guide.md` |
 | Interactive wiring walkthrough | `docs/panduan-wiring/index.html` |
 | Literature review (course requirement) | `docs/literature-review.md` |
+| Report figures: diagram sources + `render.mjs` (output PNGs in `docs/laporan/gambar/`) | `docs/laporan/diagram/` |
 
 When behavior, UI labels, env vars, or endpoints change, update the matching doc in the same change. Two pairs are copies and must be edited together: the "Web app", "3D model" and "Styling" sections here ↔ `docs/dashboard-layout.md` (Indonesian), and the "Panduan Setup" section in `README.md` ↔ `docs/setup.md`.
 

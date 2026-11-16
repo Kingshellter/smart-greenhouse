@@ -1,0 +1,33 @@
+sequenceDiagram
+  autonumber
+  participant E as ESP32
+  participant B as Broker MQTT
+  participant A as Next.js API
+  participant D as PostgreSQL
+  participant W as Dashboard web
+  actor P as Pengguna
+
+  loop tiap ±3 s (jalur utama, HTTPS)
+    E->>A: POST /api/ingest (header x-device-key)<br/>reading (tiap 10 s atau saat berubah) + events[ ] dengan age_ms
+    A->>D: simpan reading dan event<br/>(waktu event = waktu server − age_ms)
+    A->>D: tandai perintah > 60 s expired,<br/>ambil perintah pending → sent
+    A-->>E: { settings, commands }
+    E->>E: setting berubah → simpan ke NVS<br/>jalankan perintah (lewati ID yang sudah dijalankan)
+  end
+
+  opt bila MQTT aktif
+    E->>B: publish state (retained): aktuator seketika,<br/>sensor maks tiap 2 s, heartbeat 10 s
+    B-->>W: state langsung (WSS, akun hanya subscribe)
+  end
+
+  P->>W: pilih Manual, klik Siram / Buka
+  W->>A: POST /api/devices/gh-01/commands
+  A->>D: insert commands (status pending)
+  A->>B: publish ke greenhouse/gh-01/cmd
+  B->>E: perintah tiba seketika → dijalankan
+  Note over E,A: perintah yang sama tetap ikut balasan sinkron HTTP berikutnya<br/>(cadangan bila MQTT mati), ESP32 melewatinya karena ID sudah dijalankan
+
+  loop tiap 3 s (tab terbuka)
+    W->>A: GET /state, /readings, /events
+    A-->>W: data terbaru + status online
+  end

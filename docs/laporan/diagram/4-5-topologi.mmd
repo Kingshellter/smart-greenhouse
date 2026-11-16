@@ -1,0 +1,26 @@
+flowchart LR
+  subgraph LAN["Jaringan lokal · Wi-Fi 2,4 GHz WPA2 · topologi star"]
+    esp["ESP32<br/><small>mode station, IP dari DHCP</small>"]
+    laptop["Laptop pengguna"]
+    router((Router /<br/>hotspot))
+  end
+  hp["HP pengguna<br/><small>data seluler</small>"]
+  inet((Internet))
+  vercel["<b>Vercel</b><br/>Next.js: API + dashboard"]
+  db[("<b>Supabase</b><br/>PostgreSQL")]
+  broker["<b>EMQX Serverless</b><br/>broker MQTT"]
+  cron["cron-job.org<br/><small>tiap 5 menit</small>"]
+  tgapi["Telegram Bot API"]
+  tg["Telegram<br/>pengguna"]
+
+  esp --- router
+  laptop --- router
+  router --- inet
+  hp --- inet
+  inet ---|"HTTPS · TCP 443"| vercel
+  inet ---|"MQTT/TLS 8883 · WSS 8084"| broker
+  vercel ---|"PostgreSQL over TLS<br/>transaction pooler 6543"| db
+  vercel -.-|"publish cmd / settings"| broker
+  cron ---|"GET /api/cron/offline<br/>Bearer CRON_SECRET"| vercel
+  vercel ---|HTTPS| tgapi
+  tgapi --- tg
