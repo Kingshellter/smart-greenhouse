@@ -1,0 +1,10 @@
+# Deploy lewat CLI dari root repo (Root Directory di Vercel = web).
+# Hanya folder web/ yang diunggah; rahasia lokal tidak ikut.
+/*
+!/web
+web/.env
+web/.env.local
+web/.env.*.local
+web/.next
+web/node_modules
+web/.vercel
