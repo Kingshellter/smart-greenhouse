@@ -40,7 +40,7 @@ Mulai cepat: [Panduan Setup](#panduan-setup) di bawah → rangkai alat dengan [h
 | `database/presets.sql` | Tabel preset tanaman + 7 preset bawaan beserta sumbernya (jalankan setelah `schema.sql`) |
 | `database/notifications.sql` | Setting dan log notifikasi Telegram |
 | `tools/simulate-esp32.mjs` | Simulator ESP32 (HTTP + MQTT opsional), untuk tes tanpa hardware |
-| `docs/` | Dokumentasi, gambar wiring, dan gambar laporan |
+| `docs/` | Dokumentasi, gambar wiring, dan gambar laporan (sumber diagram + `render.mjs` di `docs/laporan/diagram/`) |
 
 ## Cara kerja
 

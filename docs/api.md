@@ -2,7 +2,7 @@
 
 Semua endpoint ada di `web/app/api/`. Body dan respons berformat JSON. Error berbentuk `{ "error": "pesan" }`.
 
-Terkait: variabel environment dan cara deploy di [setup.md](setup.md#variabel-environment), simulator yang meniru protokol ini di [setup.md](setup.md#4-uji-tanpa-hardware-simulator), kode error yang sering muncul di [troubleshooting.md](troubleshooting.md#dashboard-dan-koneksi), dan penjelasan fitur dari sisi pengguna di [user-guide.md](user-guide.md).
+Terkait: variabel environment dan cara deploy di [setup.md](setup.md#variabel-environment), simulator yang meniru protokol ini di [setup.md](setup.md#5-uji-tanpa-hardware-simulator), kode error yang sering muncul di [troubleshooting.md](troubleshooting.md#dashboard-dan-koneksi), dan penjelasan fitur dari sisi pengguna di [user-guide.md](user-guide.md).
 
 ## Autentikasi
 
@@ -22,10 +22,10 @@ Terkait: variabel environment dan cara deploy di [setup.md](setup.md#variabel-en
 | GET | `/api/cron/offline` | Cek node offline → Telegram |
 | GET / POST | `/api/devices` | Daftar node / tambah node |
 | GET | `/api/devices/:id/state` | Status terkini + setting |
-| PUT | `/api/devices/:id/settings` | Ubah threshold, kalibrasi, mode (parsial) |
-| POST | `/api/devices/:id/commands` | `pump_dose` / `lid` |
+| PUT | `/api/devices/:id/settings` | Ubah threshold, kalibrasi, mode (parsial); juga dipublish ke MQTT bila aktif |
+| POST | `/api/devices/:id/commands` | `pump_dose` / `lid`; juga dipublish ke MQTT bila aktif |
 | GET | `/api/devices/:id/readings?range=1h\|6h\|24h\|3d\|7d\|30d` | Riwayat (di-downsample) |
-| GET | `/api/devices/:id/events` | Log aktuator |
+| GET | `/api/devices/:id/events?limit=50` | Log aktuator terbaru (`limit` 1–500, bawaan 50) |
 | GET | `/api/devices/:id/analytics?days=7` | Statistik harian (1–90 hari) |
 | POST | `/api/devices/:id/preset` | Terapkan preset tanaman `{preset_id}` ke node |
 | GET / PUT | `/api/devices/:id/notify` | Setting notifikasi Telegram node (chat ID + jenis pesan) |

@@ -39,7 +39,7 @@ Kalau node offline, nilai sensor diredupkan dan umur data ditampilkan, karena ba
 | **Manual** | Tombol *Siram* dan *Tutup/Buka* aktif. Otomatis tidak berjalan |
 | **Maintenance** | Tutup terangkat penuh untuk akses ke tanaman; ventilasi otomatis dijeda. Berlaku di mode apa pun. Keluar dengan memilih mode lain. Penyiraman otomatis tetap bisa jalan, jadi lihat [safety.md](safety.md#bagian-bergerak) sebelum bekerja di dalam kotak |
 
-Perintah dari web diambil ESP32 pada sync berikutnya (sekitar 3 detik). Perintah yang tidak terambil dalam 60 detik dibatalkan. Kalau ESP32 tidak mengonfirmasi perintah tutup dalam 25 detik, tampilan kembali ke posisi semula dan muncul pemberitahuan.
+Perintah dari web sampai ke ESP32 dalam sekitar 1 detik kalau MQTT aktif (penanda *Live · MQTT*), atau pada sync HTTP berikutnya (sekitar 3 detik) kalau tidak. Perintah yang tidak terambil dalam 60 detik dibatalkan. Kalau ESP32 tidak mengonfirmasi perintah tutup dalam 25 detik, tampilan kembali ke posisi semula dan muncul pemberitahuan.
 
 Untuk demo atau pemakaian normal, biarkan mode *Otomatis*.
 
@@ -64,7 +64,7 @@ Rentang riwayat (1 jam sampai 30 hari) satu untuk semua: mengubahnya di satu kar
 1. Tekan kartu **Tanaman**.
 2. Pilih preset (7 preset bawaan beserta sumbernya; preset bawaan hanya-baca).
 3. Geser atau ketik tiga ambang: siram jika tanah di bawah, buka ventilasi pada suhu, dan buka ventilasi pada RH. Ambang buka harus lebih tinggi dari ambang tutupnya.
-4. Tekan **Terapkan**. Nilai dikirim ke ESP32 pada sync berikutnya.
+4. Tekan **Terapkan**. Nilai dikirim ke ESP32 seketika lewat MQTT, atau pada sync berikutnya (sekitar 3 detik) kalau MQTT tidak aktif.
 
 Preset custom bisa dibuat dan dihapus; preset hanya mengatur ambang yang bergantung pada tanaman, bukan kalibrasi alat.
 
@@ -89,6 +89,7 @@ Cara mengukur nilai awalnya ada di [hardware.md](hardware.md#urutan-tes).
 ![Notifikasi](laporan/gambar/5-10-notifikasi.png)
 
 Tombol 🔔 di navigasi membuka pengaturan per node: chat ID tujuan dan jenis pesan (tangki kosong, pompa dihentikan pengaman, sensor bermasalah, brownout, offline/online, siram otomatis, ventilasi otomatis). Cara menambah penerima: kirim `/start` ke bot dari akun Telegram penerima, tekan *Cari chat ID*, lalu *Pakai* dan *Simpan*. Tombol *Kirim pesan uji* memastikan tujuannya benar. Instalasi sisi server ada di [setup.md](setup.md#3-notifikasi-telegram-opsional).
+
 ## Arti status
 
 | Status | Arti | Yang dilakukan |

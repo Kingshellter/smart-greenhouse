@@ -1,6 +1,6 @@
 # Hardware, Wiring, dan Tes
 
-Lihat juga: [bom-and-power.md](bom-and-power.md) (komponen dan anggaran daya), [safety.md](safety.md), [troubleshooting.md](troubleshooting.md#hardware), [setup.md](setup.md#5-firmware-esp32) (firmware dan `config.h`), dan [user-guide.md](user-guide.md#kalibrasi-alat) (menu kalibrasi di dashboard).
+Lihat juga: [bom-and-power.md](bom-and-power.md) (komponen dan anggaran daya), [safety.md](safety.md), [troubleshooting.md](troubleshooting.md#hardware), [setup.md](setup.md#6-firmware-esp32) (firmware dan `config.h`), dan [user-guide.md](user-guide.md#kalibrasi-alat) (menu kalibrasi di dashboard).
 
 ## Pin
 
@@ -27,10 +27,13 @@ Baud 115200, line ending Newline.
 
 | Perintah | Fungsi |
 |---|---|
-| `status` | Semua nilai sensor dan state |
+| `status` (atau `s`) | Semua nilai sensor dan state, termasuk status koneksi server dan MQTT (`mqtt=terhubung` / `putus` / `nonaktif`) |
 | `cal` | Rata-rata ADC tanah. Catat nilainya di udara (kering) dan di air (basah), lalu isi di dashboard → bar perangkat di bawah → *Sensor tanah* → *Kalibrasi sensor* → *Ubah* |
 | `pump 3000` | Pompa 3 detik (tes) · `stop` untuk mematikan |
-| `lid open` / `lid close` / `lid 100` | Tes servo |
+| `auto off` / `auto on` | Jeda / aktifkan lagi penyiraman otomatis (untuk tes tanpa pompa menyala sendiri) |
+| `lid open` / `lid close` / `lid 100` | Tes servo (`lid 100` = sudut servo 100°). Ventilasi otomatis menunggu 2 menit setelah perintah ini |
+| `lid mt` (atau `lid maintenance`) | Angkat tutup ke posisi maintenance |
+| `lid auto` | Kembalikan tutup ke pengaturan otomatis seketika |
 
 ## Keselamatan yang sudah ada di firmware
 

@@ -11,7 +11,8 @@ Terkait: cara memakai dashboard di [user-guide.md](user-guide.md), endpoint dan 
 - Route API memakai `postgres.js` lewat satu `sql` ber-pool di `lib/db.ts` (`prepare: false` wajib untuk Supabase transaction pooler; `numeric` diparse menjadi `number`). Helper validasi input ada di `lib/http.ts` (`num`, `oneOf`, `readJson`, `bad`). Nilai sensor di luar rentang disimpan sebagai `null`, tidak dipotong.
 - "Online" berarti `last_seen` kurang dari 30 detik lalu (dihitung di `/state` dan di `DeviceList`).
 - `proxy.ts` (nama baru middleware di Next 16) menambah Basic auth HTTP hanya bila `DASHBOARD_USER`/`DASHBOARD_PASSWORD` diisi, dan mengecualikan `/api/ingest`, `/api/health`, dan `/api/cron`.
-- Dashboard menampilkan perubahan mode/tutup secara optimistis (state `pending`, dihapus saat reading mengonfirmasi atau setelah 25 detik). Kalau ESP32 tidak mengonfirmasi perintah tutup dalam 25 detik, state optimistis dikembalikan dengan toast. Firmware tidak mengirim reading saat pompa jalan, jadi animasi pompa diputar ulang dari event `pump run`, bukan dari `pump_state`.
+- Dashboard menampilkan perubahan mode/tutup secara optimistis (state `pending`, dihapus saat reading mengonfirmasi atau setelah 25 detik). Kalau ESP32 tidak mengonfirmasi perintah tutup dalam 25 detik, state optimistis dikembalikan dengan toast. Tanpa MQTT, firmware tidak mengirim reading saat pompa jalan, jadi animasi pompa diputar ulang dari event `pump run`; dengan MQTT, `pump_state` langsung menggerakkan animasi (`livePump` di `Dashboard.tsx`).
+- Lapisan MQTT opsional: `useLive()` (`lib/live.ts`) mengambil `/api/mqtt/config` (URL WebSocket + akun khusus subscribe, di balik login dashboard) dan memuat `mqtt` secara lazy. `mergeLive()` menimpa hasil polling `/state` dengan state live selama masih baru (`LIVE_FRESH_MS` 25 detik; pesan *retained* diabaikan karena umurnya tidak diketahui). Polling HTTP tetap berjalan tiap 3 detik. Topik dan alurnya: [api.md](api.md#mqtt).
 - Analitik harian dikelompokkan menurut `APP_TZ` (bawaan Asia/Jakarta); format waktu di sisi klien juga di-hardcode ke Asia/Jakarta.
 
 ### Layout
@@ -21,7 +22,7 @@ Terkait: cara memakai dashboard di [user-guide.md](user-guide.md), endpoint dan 
   - Judul dipaku di bagian atas kolom (sejajar dengan kartu tanaman). Kedua kolom samping mulai 40 px di bawah atas panggung (18 px di layar pendek), dan log event menyerap selisihnya. Kartu status dan kartu sensor menumpuk dari bawah, jadi sisa tinggi berada di antara judul dan kartu status.
 - **Kartu status:** satu-satunya kartu berwarna di halaman; warnanya adalah state (`ok` gradien hijau / `warn` kuning / `off` gelap). Judul = masalah pertama, satu baris `short` yang terlihat, semua masalah dengan teks lengkap di tooltip ⓘ yang terbuka di samping kartu (di atas kartu saat ditumpuk).
 - **Kartu sensor** (`SensorCards.tsx`: tanah / suhu / RH dengan mini chart 24 jam; varian `compact` dari chart di `Charts.tsx`): label + status, nilai + ambang yang dipakai, lalu chart selebar penuh. Di bawah tinggi 800 px, chart pindah ke samping nilai. Saat node offline, nilai sensor diredupkan dan badge status diganti umur data (`stale`), karena reading terakhir bukan data langsung.
-- **Navigasi:** merek, id node, dan pil Live/Offline dengan umur data.
+- **Navigasi:** merek, id node, dan pil Live/Offline dengan umur data (*Live · MQTT* selama state MQTT masih baru).
 - **Tengah:** panggung 3D, dengan pilihan mode berupa tiga tombol kecil terpisah yang mengambang di bagian bawah panggung (`.mode-float`, opasitas 55 % sampai di-hover atau difokus). Tombolnya solid dan tanpa transform: `backdrop-filter` di atas canvas yang beranimasi membuatnya berkedip.
 - **Kolom kanan:** kartu tanaman, lalu log event (`EventLog.tsx`: gelembung ikon per jenis aksi, pemicu di bawah teks, waktu di kanan, satu header lengket per hari). Kolom kanan di-scroll secara internal bila ada baris yang dibuka.
 
@@ -49,7 +50,7 @@ Chart dan kontrol tutup/pompa ada di kartu hotspot 3D.
 ## Model 3D (`components/Greenhouse3D.tsx`)
 
 ### Model
-Model react-three-fiber dengan skala sebenarnya (1 unit = 1 cm; kotak 32×20×20 cm, ruang tanaman di kiri, elektronik di kanan, tutup berengsel di tepi belakang). Model mengikuti state langsung: sudut tutup dianimasikan pada kecepatan servo sebenarnya (`SERVO_DEG_PER_S` di `lib/settings.ts`, sesuai `SERVO_STEP_MS` tetap di firmware = 5 ms/°; kecepatan servo bukan setting), warna tanah, aliran pompa, peringatan tangki.
+Model react-three-fiber dengan skala sebenarnya (1 unit = 1 cm; kotak 32×20×20 cm, ruang tanaman di kiri, elektronik di kanan, tutup berengsel di tepi belakang). Model mengikuti state langsung: sudut tutup dianimasikan pada kecepatan servo sebenarnya (`SERVO_DEG_PER_S` di `lib/settings.ts`, sesuai `SERVO_STEP_MS` tetap di firmware = 15 ms/°; kecepatan servo bukan setting), warna tanah, aliran pompa, peringatan tangki.
 - Tampilannya rangka aluminium + kaca; ruang kanan (elektronik) punya tutup tetap.
 - Botol air berdiri di luar kotak, diikat ke dinding kanan luar (`BOTTLE_X`/`BOTTLE_Z`), sehingga model lebih lebar di kanan (`MODEL_W`, `TARGET` digeser ke kanan).
 - Selang pompa digambar oleh `roundedPath()` sebagai ruas lurus dengan tikungan bulat (`TUBE_POINTS`, `TUBE_BEND`): naik keluar dari botol, melintang lewat grommet di dinding kanan dan sekat, lalu turun di atas tanaman. Tetesan air pompa mengikuti jalur yang sama.
